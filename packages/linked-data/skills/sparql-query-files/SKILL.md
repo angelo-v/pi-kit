@@ -5,133 +5,29 @@ description: Executes SPARQL 1.1 queries (SELECT, ASK, CONSTRUCT, DESCRIBE) agai
 
 # SPARQL Query Skill
 
-Use the `discover_rdf_files` tool to find RDF files, then `sparql_query_files` to query them.
+## Workflow
 
-## Query Strategy: Semantic First, Text as Fallback
-
-### 🥇 Step 0: Check for Existing Query Files
-
-Before writing a new query, call `discover_sparql_queries` to check for existing `.rq` / `.sparql` files.
-
-- Matches directly → run it via `sparql_query_files`
-- Partial match → adapt it, save as a new `.rq` file (do not overwrite the original)
-- No match → continue with Step 1
-
-### 🥈 Step 1: Discover the Graph Structure
-
-Query for classes and properties before navigating by type:
+1. **Check existing queries** — run `discover_sparql_queries`; reuse or adapt any match.
+2. **Find files** — run `discover_rdf_files` if the user hasn't specified files.
+3. **Explore structure** — query classes/properties before navigating by type (see step 3 pattern below).
+4. **Query semantically** — traverse named individuals; use text `FILTER` only as a last resort.
 
 ```sparql
-SELECT DISTINCT ?class ?label WHERE {
-  { ?class a owl:Class } UNION { ?x a ?class . FILTER(isIRI(?class)) }
-  OPTIONAL { ?class rdfs:label ?label }
-} ORDER BY ?class
-```
-
-Then navigate directly via type and object reference — not string matching:
-
-```sparql
-# ✅ Good: direct object reference
-?item a ex:SomeClass ;
-      ex:relatedTo ex:SomeOtherEntity .
-
-# ❌ Avoid: string search in URIs
-FILTER(CONTAINS(LCASE(STR(?s)), "keyword"))
-```
-
-### 🥉 Fallback: Text-Based Search
-
-Only when the entity has no named individual in the graph or the structure is unknown:
-
-```sparql
-SELECT ?s ?p ?o WHERE {
-  ?s ?p ?o .
-  FILTER(CONTAINS(LCASE(STR(?o)), "keyword"))
-} LIMIT 20
-```
-
----
-
-## Common SPARQL Patterns
-
-### All triples (exploration)
-
-```sparql
-SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 20
-```
-
-### All classes used in the graph
-
-```sparql
+-- Step 3: discover classes
 SELECT DISTINCT ?class WHERE { ?s a ?class } ORDER BY ?class
 ```
 
-### All SKOS concepts with labels
-
 ```sparql
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?concept ?label WHERE {
-  ?concept a skos:Concept ; skos:prefLabel ?label .
-} ORDER BY ?label
+-- ✅ Semantic traversal
+?item a ex:SomeClass ; ex:relatedTo ex:SomeOtherEntity .
+
+-- ❌ Avoid string matching in URIs
+FILTER(CONTAINS(LCASE(STR(?s)), "keyword"))
 ```
 
-### Broader / narrower hierarchy
+> **⚠️ Never present inferences as graph facts.** Every statement must be backed by a queried triple. Mark anything else as *"interpretation — not modelled in the graph"*.
 
-```sparql
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?concept ?label ?broader ?broaderLabel WHERE {
-  ?concept a skos:Concept ; skos:prefLabel ?label .
-  OPTIONAL { ?concept skos:broader ?broader . ?broader skos:prefLabel ?broaderLabel }
-} ORDER BY ?broader ?label
-```
+## Common patterns & prefixes
 
-### Top concepts (no broader term)
-
-```sparql
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?concept ?label WHERE {
-  ?concept a skos:Concept ; skos:prefLabel ?label .
-  FILTER NOT EXISTS { ?concept skos:broader ?any }
-} ORDER BY ?label
-```
-
-### All properties of a specific resource
-
-```sparql
-SELECT ?p ?o WHERE { <https://example.org/SomeResource> ?p ?o }
-```
-
-### Label search (substring)
-
-```sparql
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-SELECT ?s ?label WHERE {
-  ?s ?labelProp ?label .
-  FILTER(?labelProp IN (rdfs:label, skos:prefLabel, skos:altLabel))
-  FILTER(CONTAINS(LCASE(STR(?label)), "keyword"))
-}
-```
-
----
-
-## Standard Prefixes
-
-```sparql
-PREFIX rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX owl:    <http://www.w3.org/2002/07/owl#>
-PREFIX xsd:    <http://www.w3.org/2001/XMLSchema#>
-PREFIX skos:   <http://www.w3.org/2004/02/skos/core#>
-PREFIX dct:    <http://purl.org/dc/terms/>
-PREFIX schema: <https://schema.org/>
-PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
-```
-
----
-
-> **⚠️ Never present inferences as graph facts.**
-> Every statement must be backed by a concrete queried triple.
-> Connections that only follow from text definitions or LLM world knowledge must be
-> explicitly marked as *"interpretation — not modelled in the graph"*.
-> Never mix SPARQL results and LLM conclusions without making this transparent.
+For ready-to-use query patterns and standard prefix declarations, read the reference file:
+`skills/sparql-query-files/reference.md`

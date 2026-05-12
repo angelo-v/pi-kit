@@ -18,6 +18,7 @@ import { findBinary } from "./lib/find-binary.js";
 import { findByExtensions, RDF_EXTENSIONS, QUERY_EXTENSIONS } from "./lib/find-files.js";
 import { resolveSources } from "./lib/resolve-sources.js";
 import { buildArgs } from "./lib/format.js";
+import { ensureLimit } from "./lib/limit-query.js";
 import { runQuery } from "./lib/run-query.js";
 
 export default function (pi: ExtensionAPI) {
@@ -25,22 +26,14 @@ export default function (pi: ExtensionAPI) {
     name: "sparql_query_files",
     label: "SPARQL Query (local files)",
     description:
-      "Executes a SPARQL 1.1 query (SELECT, ASK, CONSTRUCT, DESCRIBE) against one or more " +
-      "local RDF/Turtle files using Comunica. " +
-      "Use this tool to query, explore, or analyse knowledge graphs, ontologies, or SKOS " +
-      "vocabularies stored as .ttl, .rdf, or .n3 files in the workspace.",
-    promptSnippet:
-      "Run SPARQL queries against local RDF/Turtle files",
+      "Run a SPARQL 1.1 query (SELECT/ASK/CONSTRUCT/DESCRIBE) against local RDF/Turtle files using Comunica.",
     promptGuidelines: [
-      "Use sparql_query_files whenever the user asks to query, explore, or analyse a local RDF/Turtle file with SPARQL.",
-      "Use sparql_query_files to discover classes and properties before constructing domain-specific queries.",
-      "Always prefer named-individual graph traversal over FILTER(CONTAINS(...)) string matching in sparql_query_files queries.",
+      "Use sparql_query_files to query, explore, or analyse local RDF/Turtle files with SPARQL.",
+      "Always prefer named-individual graph traversal over FILTER(CONTAINS(...)) string matching.",
     ],
     parameters: Type.Object({
       files: Type.Array(Type.String(), {
-        description:
-          "Paths to RDF/Turtle files to query (relative to workspace root or absolute). " +
-          "Use the `discover_rdf_files` tool first if you are unsure which files exist.",
+        description: "File paths to query (relative or absolute). Run discover_rdf_files first if unknown.",
         minItems: 1,
       }),
       query: Type.String({
@@ -48,7 +41,7 @@ export default function (pi: ExtensionAPI) {
       }),
       format: Type.Optional(
         StringEnum(["table", "json", "csv", "turtle"] as const, {
-          description: "Output format. Defaults to 'table'. Use 'turtle' for CONSTRUCT/DESCRIBE.",
+          description: "Output format ('table'|'json'|'csv'|'turtle'). Use 'turtle' for CONSTRUCT/DESCRIBE.",
           default: "table",
         })
       ),
@@ -78,20 +71,19 @@ export default function (pi: ExtensionAPI) {
       }
 
       const fmt = params.format ?? "table";
-      const args = buildArgs(sources, params.query, fmt);
+      const query = ensureLimit(params.query);
+      const args = buildArgs(sources, query, fmt);
 
       try {
         const { output } = await runQuery(binary, args, cwd);
         return {
           content: [{ type: "text", text: output }],
-          details: { files: params.files, format: fmt },
         };
       } catch (err: any) {
         const msg = err.stderr || err.stdout || err.message;
         return {
           content: [{ type: "text", text: `SPARQL Error:\n${msg}` }],
           isError: true,
-          details: { files: params.files, query: params.query },
         };
       }
     },
@@ -101,11 +93,9 @@ export default function (pi: ExtensionAPI) {
     name: "discover_rdf_files",
     label: "Discover RDF Files",
     description:
-      "Finds all RDF/Turtle data files (.ttl, .rdf, .n3, .jsonld, .trig, .nq, .nt) in the workspace. " +
-      "Use this before sparql_query_files when the user has not specified which files to query.",
-    promptSnippet: "List all RDF/Turtle data files in the workspace",
+      "Finds all RDF/Turtle data files (.ttl, .rdf, .n3, .jsonld, .trig, .nq, .nt) in the workspace.",
     promptGuidelines: [
-      "Use discover_rdf_files before sparql_query_files when the user has not specified which RDF files to query.",
+      "Run discover_rdf_files before sparql_query_files when the user has not specified which RDF files to query.",
     ],
     parameters: Type.Object({}),
 
@@ -129,11 +119,9 @@ export default function (pi: ExtensionAPI) {
     name: "discover_sparql_queries",
     label: "Discover SPARQL Query Files",
     description:
-      "Finds all SPARQL query files (.rq, .sparql) in the workspace. " +
-      "Use this to check for existing reusable queries before writing a new one.",
-    promptSnippet: "List all SPARQL query files (.rq, .sparql) in the workspace",
+      "Finds all SPARQL query files (.rq, .sparql) in the workspace.",
     promptGuidelines: [
-      "Use discover_sparql_queries before writing a new SPARQL query to check if a reusable .rq or .sparql file already exists.",
+      "Run discover_sparql_queries before writing a new SPARQL query to check for reusable .rq files.",
     ],
     parameters: Type.Object({}),
 

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { findBinary } from "../find-binary.js";
 import { resolveSources } from "../resolve-sources.js";
 import { buildArgs } from "../format.js";
+import { ensureLimit, DEFAULT_LIMIT } from "../limit-query.js";
 import { runQuery } from "../run-query.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,13 @@ const BINARY = findBinary(CWD);
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 async function sparql(query: string, format: "table" | "json" | "csv" = "json") {
+  const { sources } = resolveSources([BOOKS_TTL], CWD);
+  const args = buildArgs(sources, ensureLimit(query), format);
+  return runQuery(BINARY, args, CWD);
+}
+
+/** Run without ensureLimit so we can observe the raw behaviour. */
+async function sparqlRaw(query: string, format: "table" | "json" | "csv" = "json") {
   const { sources } = resolveSources([BOOKS_TTL], CWD);
   const args = buildArgs(sources, query, format);
   return runQuery(BINARY, args, CWD);
@@ -88,6 +96,46 @@ describe("integration: output formats", () => {
     // First line must be a header row with column names
     const firstLine = output.split("\n")[0];
     expect(firstLine).toMatch(/^[a-zA-Z]/);
+  });
+});
+
+describe("integration: ensureLimit", () => {
+  it("caps results when a bare SELECT has no LIMIT", async () => {
+    // The fixture has 12 triples; with a cap of 2 we must get exactly 2 back.
+    const { output } = await sparqlRaw(
+      ensureLimit("SELECT * WHERE { ?s ?p ?o }", 2)
+    );
+    const parsed = JSON.parse(output);
+    expect(parsed.results.bindings).toHaveLength(2);
+  });
+
+  it("does not add a second LIMIT when one is already present", async () => {
+    // Query already limits to 1; ensureLimit must not override it.
+    const query = "SELECT * WHERE { ?s ?p ?o } LIMIT 1";
+    const { output } = await sparqlRaw(ensureLimit(query));
+    const parsed = JSON.parse(output);
+    expect(parsed.results.bindings).toHaveLength(1);
+  });
+
+  it("applies DEFAULT_LIMIT and returns a valid complete result", async () => {
+    // Fixture has 12 triples — well under DEFAULT_LIMIT — so all rows come back.
+    const { output } = await sparql("SELECT * WHERE { ?s ?p ?o }");
+    const parsed = JSON.parse(output);
+    // Result is complete (not truncated mid-row) and within the limit.
+    expect(parsed.results.bindings.length).toBeGreaterThan(0);
+    expect(parsed.results.bindings.length).toBeLessThanOrEqual(DEFAULT_LIMIT);
+  });
+
+  it("passes a CONSTRUCT query through unchanged and returns valid Turtle", async () => {
+    const construct = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
+    // ensureLimit must not modify it; Comunica must still execute it fine.
+    const limitedQuery = ensureLimit(construct);
+    expect(limitedQuery).toBe(construct);
+    const { sources } = resolveSources([BOOKS_TTL], CWD);
+    const args = buildArgs(sources, limitedQuery, "turtle");
+    const { output } = await runQuery(BINARY, args, CWD);
+    // Result must be non-empty Turtle.
+    expect(output.trim().length).toBeGreaterThan(0);
   });
 });
 
