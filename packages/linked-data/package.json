@@ -20,6 +20,11 @@
   "dependencies": {
     "@comunica/query-sparql-file": "^5.2.2"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aveltens/pi-kit.git",
+    "directory": "packages/linked-data"
+  },
   "pi": {
     "extensions": [
       "extensions/"

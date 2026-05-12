@@ -18,5 +18,9 @@
   ],
   "dependencies": {
     "vitest": "^4.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aveltens/pi-kit.git"
   }
 }
