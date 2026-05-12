@@ -1,0 +1,21 @@
+@prefix ex:   <http://example.org/> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:Book1
+    a ex:Book ;
+    rdfs:label "The Semantic Web Primer" ;
+    ex:author ex:Author1 .
+
+ex:Book2
+    a ex:Book ;
+    rdfs:label "Linked Data Patterns" ;
+    ex:author ex:Author2 .
+
+ex:Author1
+    a ex:Author ;
+    rdfs:label "Alice" .
+
+ex:Author2
+    a ex:Author ;
+    rdfs:label "Bob" .

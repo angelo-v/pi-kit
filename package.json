@@ -1,0 +1,22 @@
+{
+  "name": "pi-kit",
+  "version": "0.1.0",
+  "description": "Skills and extensions for the Pi Coding Agent",
+  "license": "MIT",
+  "author": {
+    "name": "Angelo Veltens",
+    "email": "inbox+github.com@veltens.org",
+    "url": "https://angelo.veltens.org/profile/card#me"
+  },
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "vitest": "^4.1.5"
+  }
+}
