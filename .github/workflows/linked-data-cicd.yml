@@ -1,0 +1,42 @@
+name: CI/CD Linked Data
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/linked-data/**"
+      - ".github/workflows/linked-data-cicd.yml"
+
+jobs:
+  test-and-publish:
+    name: Test & Publish
+    runs-on: ubuntu-latest
+
+    # Required for npm trusted publishing (OIDC token)
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test --workspace=packages/linked-data -- --run
+
+      - name: Publish to npm (trusted publishing)
+        uses: JS-DevTools/npm-publish@v4
+        with:
+          package: packages/linked-data
+          provenance: true
+          access: public
+
