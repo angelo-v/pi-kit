@@ -26,11 +26,11 @@ describe("resolveSources", () => {
   beforeEach(() => vi.mocked(existsSync).mockReset());
 
   it("converts an existing absolute path to a file:// URI", () => {
-    setExisting("/data/graph.ttl");
+    setExisting("/any/cwd/graph.ttl");
 
-    const { sources, missing } = resolveSources(["/data/graph.ttl"], "/any/cwd");
+    const { sources, missing } = resolveSources(["/any/cwd/graph.ttl"], "/any/cwd");
 
-    expect(sources).toEqual(["file:///data/graph.ttl"]);
+    expect(sources).toEqual(["file:///any/cwd/graph.ttl"]);
     expect(missing).toEqual([]);
   });
 
@@ -99,5 +99,44 @@ describe("resolveSources", () => {
 
     expect(missing[0]).toMatch(/^\//);
     expect(missing[0]).toBe("/cwd/rel/path.ttl");
+  });
+
+  // ── path-traversal guard ────────────────────────────────────────────────
+
+  it("rejects a path that escapes the workspace root via ..", () => {
+    vi.mocked(existsSync).mockReturnValue(true); // file exists but is outside cwd
+
+    const { sources, missing } = resolveSources(["../../etc/passwd"], "/workspace/project");
+
+    expect(sources).toHaveLength(0);
+    expect(missing).toContain("/etc/passwd");
+  });
+
+  it("rejects an absolute path outside the workspace root", () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    const { sources, missing } = resolveSources(["/etc/shadow"], "/workspace/project");
+
+    expect(sources).toHaveLength(0);
+    expect(missing).toContain("/etc/shadow");
+  });
+
+  it("does not confuse a sibling directory that shares a prefix with cwd", () => {
+    // /workspace-other should not be considered inside /workspace
+    vi.mocked(existsSync).mockReturnValue(true);
+
+    const { sources, missing } = resolveSources(["/workspace-other/data.ttl"], "/workspace");
+
+    expect(sources).toHaveLength(0);
+    expect(missing).toContain("/workspace-other/data.ttl");
+  });
+
+  it("accepts a file that is legitimately inside the workspace root", () => {
+    setExisting("/workspace/project/data/graph.ttl");
+
+    const { sources, missing } = resolveSources(["data/graph.ttl"], "/workspace/project");
+
+    expect(sources).toEqual(["file:///workspace/project/data/graph.ttl"]);
+    expect(missing).toHaveLength(0);
   });
 });

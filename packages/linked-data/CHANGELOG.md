@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.2.1
+
+### Security
+
+- `sparql_query_files` no longer accepts file paths that point outside the workspace root.
+- `sparql_query_endpoint` and `sparql_query_wikidata` now reject non-HTTP/HTTPS endpoint URLs.
+- The result-count safety cap is no longer bypassed when a SPARQL query contains `LIMIT` inside a string literal or comment.
+
 ## 0.2.0
 
 ### Added

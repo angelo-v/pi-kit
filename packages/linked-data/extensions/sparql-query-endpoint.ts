@@ -31,9 +31,10 @@ import {
   WIKIDATA_PREFIXES,
   injectWikidataPrefixes,
 } from "./lib/wikidata.js";
+import { validateEndpointUrl } from "./lib/validate-endpoint.js";
 
 // Re-export so consumers can import from a single place if needed.
-export { WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES, injectWikidataPrefixes };
+export { WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES, injectWikidataPrefixes, validateEndpointUrl };
 
 // ── shared helper ─────────────────────────────────────────────────────────────
 
@@ -43,6 +44,11 @@ async function queryEndpoint(
   format: OutputFormat,
   cwd: string
 ): Promise<{ output: string; isError?: boolean }> {
+  const urlError = validateEndpointUrl(endpointUrl);
+  if (urlError) {
+    return { output: `Error: ${urlError}`, isError: true };
+  }
+
   let binary: string;
   try {
     binary = findBinary(cwd, import.meta.url, REMOTE_BINARY_NAME);

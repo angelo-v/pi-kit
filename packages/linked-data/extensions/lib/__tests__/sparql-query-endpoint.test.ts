@@ -9,6 +9,7 @@ import {
   WIKIDATA_PREFIXES,
   WIKIDATA_ENDPOINT,
 } from "../wikidata.js";
+import { validateEndpointUrl } from "../validate-endpoint.js";
 
 describe("WIKIDATA_ENDPOINT", () => {
   it("points to the Wikidata Query Service", () => {
@@ -97,5 +98,51 @@ describe("injectWikidataPrefixes", () => {
 
     expect(result).toContain("CONSTRUCT");
     expect(result).toContain("PREFIX wd:");
+  });
+});
+
+// ── validateEndpointUrl ────────────────────────────────────────────────────
+
+describe("validateEndpointUrl", () => {
+  it("returns null for a valid https URL", () => {
+    expect(validateEndpointUrl("https://query.wikidata.org/sparql")).toBeNull();
+  });
+
+  it("returns null for a valid http URL", () => {
+    expect(validateEndpointUrl("http://dbpedia.org/sparql")).toBeNull();
+  });
+
+  it("rejects a non-URL string", () => {
+    expect(validateEndpointUrl("not a url")).toMatch(/Invalid endpoint URL/);
+  });
+
+  it("rejects a file:// URL", () => {
+    expect(validateEndpointUrl("file:///etc/passwd")).toMatch(/http or https/);
+  });
+
+  it("rejects a javascript: URL", () => {
+    expect(validateEndpointUrl("javascript:alert(1)")).toMatch(/http or https/);
+  });
+
+  it("rejects an ftp:// URL", () => {
+    expect(validateEndpointUrl("ftp://example.com/sparql")).toMatch(/http or https/);
+  });
+
+  it("rejects an empty string", () => {
+    expect(validateEndpointUrl("")).toMatch(/Invalid endpoint URL/);
+  });
+
+  it("accepts a URL with an embedded newline (Node strips it; execFile array args prevent shell injection)", () => {
+    // Node's URL parser silently strips newline control characters, yielding a
+    // valid https: URL. Because the endpoint is passed to execFile as an array
+    // element (not a shell string), the stripped newline poses no injection
+    // risk. The validator therefore returns null (no error).
+    expect(validateEndpointUrl("https://example.com/sparql\nnefarious-arg")).toBeNull();
+  });
+
+  it("accepts an http URL pointing at an internal host (SSRF is a network-layer concern)", () => {
+    // The validator enforces protocol only; blocking internal IPs is left to
+    // network policy. Document that this is intentional.
+    expect(validateEndpointUrl("http://localhost:8080/sparql")).toBeNull();
   });
 });

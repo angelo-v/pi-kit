@@ -64,4 +64,34 @@ describe("ensureLimit", () => {
     const result = ensureLimit(`${SELECT}   `);
     expect(result).toMatch(/\}\nLIMIT \d+$/);
   });
+
+  // ── false-positive guards ───────────────────────────────────────────────
+
+  it("appends LIMIT when LIMIT appears only inside a double-quoted string literal", () => {
+    const query = `SELECT * WHERE { ?s ?p "LIMIT 5 is the max" }`;
+    const result = ensureLimit(query);
+    // Must still append because the only LIMIT token is inside a string
+    expect(result).toContain(`LIMIT ${DEFAULT_LIMIT}`);
+  });
+
+  it("appends LIMIT when LIMIT appears only inside a single-quoted string literal", () => {
+    const query = `SELECT * WHERE { ?s ?p 'LIMIT 5 is the max' }`;
+    const result = ensureLimit(query);
+    expect(result).toContain(`LIMIT ${DEFAULT_LIMIT}`);
+  });
+
+  it("appends LIMIT when LIMIT appears only in a # comment", () => {
+    const query = `SELECT * WHERE { ?s ?p ?o } # LIMIT 5 legacy cap`;
+    const result = ensureLimit(query);
+    expect(result).toContain(`LIMIT ${DEFAULT_LIMIT}`);
+  });
+
+  it("does not append LIMIT when a real LIMIT follows a comment on the same line", () => {
+    // Comment is stripped; the real LIMIT on the next line must still be found
+    const query = `SELECT * WHERE { ?s ?p ?o } # ignore this\nLIMIT 10`;
+    const result = ensureLimit(query);
+    const matches = result.match(/LIMIT/gi) ?? [];
+    expect(matches).toHaveLength(1);
+    expect(result).toContain("LIMIT 10");
+  });
 });

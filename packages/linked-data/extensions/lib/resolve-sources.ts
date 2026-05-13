@@ -5,7 +5,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 
 export interface ResolvedSources {
   /** `file://` URIs for files that were found. */
@@ -26,8 +26,20 @@ export function resolveSources(files: string[], cwd: string): ResolvedSources {
   const sources: string[] = [];
   const missing: string[] = [];
 
+  // Normalise cwd once and ensure it ends with the path separator so that a
+  // simple `startsWith` check cannot be fooled by a sibling directory whose
+  // name happens to share a prefix (e.g. "/workspace-other" vs "/workspace").
+  const safeRoot = resolve(cwd) + sep;
+
   for (const f of files) {
     const abs = resolve(cwd, f);
+
+    // Reject any path that escapes the workspace root via "../.." traversal.
+    if (!abs.startsWith(safeRoot) && abs !== resolve(cwd)) {
+      missing.push(abs);
+      continue;
+    }
+
     if (!existsSync(abs)) {
       missing.push(abs);
     } else {
