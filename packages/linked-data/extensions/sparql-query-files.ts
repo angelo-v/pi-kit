@@ -52,7 +52,7 @@ export default function (pi: ExtensionAPI) {
 
       let binary: string;
       try {
-        binary = findBinary(cwd);
+        binary = findBinary(cwd, import.meta.url);
       } catch (err: any) {
         return {
           content: [{ type: "text", text: `Error: ${err.message}` }],

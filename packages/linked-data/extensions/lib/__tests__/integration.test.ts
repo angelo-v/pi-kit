@@ -19,10 +19,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES   = join(__dirname, "fixtures");
 const BOOKS_TTL  = join(FIXTURES, "books.ttl");
 
-// Locate the binary relative to the workspace root (same walk-up logic used
-// at runtime – this also verifies that `findBinary` works for real).
+// Locate the binary by starting from this test file's own location —
+// mirrors what the real extension does with import.meta.url at runtime.
 const CWD    = join(__dirname, "..", "..", "..", "..", ".."); // workspace root
-const BINARY = findBinary(CWD);
+const BINARY = findBinary(CWD, import.meta.url);
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

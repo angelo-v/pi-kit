@@ -18,7 +18,8 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@comunica/query-sparql-file": "^5.2.2"
+    "@comunica/query-sparql-file": "^5.2.2",
+    "@comunica/query-sparql": "^5.2.2"
   },
   "repository": {
     "type": "git",
