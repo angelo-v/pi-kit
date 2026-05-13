@@ -1,6 +1,6 @@
 {
   "name": "@aveltens/pi-kit-linked-data",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pi Coding Agent skills and extensions to work with RDF, SPARQL and other Linked Data technologies",
   "license": "MIT",
   "author": {
