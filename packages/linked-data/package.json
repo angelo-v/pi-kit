@@ -1,8 +1,10 @@
 {
   "name": "@aveltens/pi-kit-linked-data",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Pi Coding Agent skills and extensions to work with RDF, SPARQL and other Linked Data technologies",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "license": "MIT",
   "author": {
     "name": "Angelo Veltens",
@@ -19,13 +21,15 @@
     "test": "vitest"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
   },
   "dependencies": {
+    "@comunica/query-sparql": "^5.2.2",
     "@comunica/query-sparql-file": "^5.2.2",
-    "@comunica/query-sparql": "^5.2.2"
+    "jsonld": "^9.0.0",
+    "n3": "^2.0.3"
   },
   "repository": {
     "type": "git",
