@@ -20,6 +20,7 @@ import { resolveSources } from "./lib/resolve-sources.js";
 import { buildArgs } from "./lib/format.js";
 import { ensureLimit } from "./lib/limit-query.js";
 import { runQuery } from "./lib/run-query.js";
+import { logQuery } from "./lib/query-logger.js";
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
@@ -76,11 +77,13 @@ export default function (pi: ExtensionAPI) {
 
       try {
         const { output } = await runQuery(binary, args, cwd);
+        await logQuery({ toolName: "sparql_query_files", sources, query, result: output, cwd });
         return {
           content: [{ type: "text", text: output }],
         };
       } catch (err: any) {
         const msg = err.stderr || err.stdout || err.message;
+        await logQuery({ toolName: "sparql_query_files", sources, query, result: msg, isError: true, cwd });
         return {
           content: [{ type: "text", text: `SPARQL Error:\n${msg}` }],
           isError: true,

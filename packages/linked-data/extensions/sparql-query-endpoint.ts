@@ -32,6 +32,7 @@ import {
   injectWikidataPrefixes,
 } from "./lib/wikidata.js";
 import { validateEndpointUrl } from "./lib/validate-endpoint.js";
+import { logQuery } from "./lib/query-logger.js";
 
 // Re-export so consumers can import from a single place if needed.
 export { WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES, injectWikidataPrefixes, validateEndpointUrl };
@@ -112,6 +113,14 @@ export default function (pi: ExtensionAPI) {
         fmt,
         ctx.cwd
       );
+      await logQuery({
+        toolName: "sparql_query_endpoint",
+        sources: [params.endpoint],
+        query: params.query,
+        result: output,
+        isError,
+        cwd: ctx.cwd,
+      });
       return {
         content: [{ type: "text", text: output }],
         ...(isError ? { isError: true } : {}),
@@ -161,6 +170,14 @@ export default function (pi: ExtensionAPI) {
         fmt,
         ctx.cwd
       );
+      await logQuery({
+        toolName: "sparql_query_wikidata",
+        sources: [WIKIDATA_ENDPOINT],
+        query: queryWithPrefixes,
+        result: output,
+        isError,
+        cwd: ctx.cwd,
+      });
       return {
         content: [{ type: "text", text: output }],
         ...(isError ? { isError: true } : {}),

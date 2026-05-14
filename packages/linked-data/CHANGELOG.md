@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.0
+
+### Added
+- Query logging for all three SPARQL tools (`sparql_query_files`, `sparql_query_endpoint`, `sparql_query_wikidata`). Each execution writes one log file to `.agents/logs/<tool-name>/<timestamp>.log` containing the input sources or endpoint URL, the full query, and the result. Logging failures are silently discarded and never affect query results.
+
 ## 0.3.0
 
 ### Added
