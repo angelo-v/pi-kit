@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Title</title>
+
+  <!-- Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    /* === Reset & base === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-bg: #f9fafb;
+      --color-surface: #ffffff;
+      --color-primary: #4f46e5;
+      --space: 1rem;
+      font-family: system-ui, sans-serif;
+      background: var(--color-bg);
+      color: #111827;
+      line-height: 1.5;
+    }
+
+    /* === Layout === */
+    #app {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: var(--space);
+    }
+
+    /* === Components === */
+  </style>
+</head>
+<body>
+
+  <main id="app"></main>
+
+  <script type="module">
+    // === Imports (esm.sh) ===
+    // import confetti from 'https://esm.sh/canvas-confetti@1';
+
+    // === Custom Elements ===
+
+    class AppRoot extends HTMLElement {
+      connectedCallback() {
+        this.innerHTML = `<h1>Hello, world!</h1>`;
+      }
+    }
+    customElements.define('app-root', AppRoot);
+
+    // === Bootstrap ===
+    document.getElementById('app').innerHTML = `<app-root></app-root>`;
+  </script>
+</body>
+</html>

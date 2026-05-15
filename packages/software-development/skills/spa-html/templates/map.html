@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Map Explorer</title>
+
+  <!-- 1. Pollen design tokens (always first) -->
+  <link rel="stylesheet" href="https://esm.sh/pollen-css@5/pollen.css" />
+
+  <!-- 2. Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- 3. Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ─── Layer 2: Semantic theme ─────────────────────────────────────── */
+    :root {
+      /* Colour */
+      --color-bg:           var(--color-grey-100);
+      --color-surface:      var(--color-white);
+      --color-border:       var(--color-grey-200);
+      --color-text:         var(--color-grey-900);
+      --color-text-muted:   var(--color-grey-500);
+      --color-brand:        var(--color-teal-600);
+      --color-brand-light:  var(--color-teal-50);
+      --color-brand-dark:   var(--color-teal-800);
+      --color-danger:       var(--color-red-600);
+      --color-success:      var(--color-green-600);
+
+      /* Typography */
+      --font-body:    var(--font-sans);
+      --text-sm:      var(--scale-00);
+      --text-base:    var(--scale-0);
+      --text-lg:      var(--scale-1);
+      --text-xl:      var(--scale-2);
+      --text-2xl:     var(--scale-3);
+
+      /* Spacing */
+      --space-1:  var(--size-1);
+      --space-2:  var(--size-2);
+      --space-3:  var(--size-3);
+      --space-4:  var(--size-4);
+      --space-6:  var(--size-6);
+      --space-8:  var(--size-8);
+
+      /* Surface */
+      --radius:       var(--radius-md);
+      --radius-lg:    var(--radius-lg);
+      --shadow:       var(--shadow-xs);
+      --shadow-card:  var(--shadow-sm);
+
+      /* Layout */
+      --toolbar-h:  56px;
+      --panel-w:    300px;
+      --z-toolbar:  var(--layer-3);
+      --z-overlay:  var(--layer-4);
+
+      /* Transitions */
+      --ease:      var(--ease-out-cubic);
+      --duration:  150ms;
+
+      font-family: var(--font-body);
+      background:  var(--color-bg);
+      color:       var(--color-text);
+      line-height: 1.5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg:         var(--color-grey-950);
+        --color-surface:    var(--color-grey-900);
+        --color-border:     var(--color-grey-700);
+        --color-text:       var(--color-grey-50);
+        --color-text-muted: var(--color-grey-400);
+      }
+    }
+
+    /* ─── Shell layout ────────────────────────────────────────────────── */
+    .shell {
+      display: grid;
+      grid-template-rows: var(--toolbar-h) 1fr;
+      grid-template-columns: 1fr var(--panel-w);
+      grid-template-areas:
+        "toolbar toolbar"
+        "map     panel";
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ─── Toolbar ─────────────────────────────────────────────────────── */
+    .toolbar {
+      grid-area: toolbar;
+      z-index: var(--z-toolbar);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 0 var(--space-4);
+    }
+
+    .app-name {
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--color-brand);
+      margin-right: var(--space-4);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    /* ─── Map canvas ──────────────────────────────────────────────────── */
+    .map-wrap {
+      grid-area: map;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Leaflet attribution sits above the panel border */
+    .leaflet-control-attribution {
+      font-size: 10px;
+    }
+
+    /* ─── Detail / side panel ─────────────────────────────────────────── */
+    .detail-panel {
+      grid-area: panel;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-text-muted);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    /* Marker list */
+    .marker-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .marker-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background var(--duration) var(--ease),
+                  border-color var(--duration) var(--ease);
+    }
+
+    .marker-item:hover {
+      background: var(--color-brand-light);
+      border-color: var(--color-brand);
+    }
+
+    .marker-item.active {
+      background: var(--color-brand-light);
+      border-color: var(--color-brand);
+    }
+
+    .marker-item-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .marker-item-title {
+      font-size: var(--text-base);
+      font-weight: 600;
+      color: var(--color-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .marker-item-sub {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+    }
+
+    .empty-state {
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      text-align: center;
+      padding-top: var(--space-8);
+    }
+
+    /* ─── Add-marker dialog ───────────────────────────────────────────── */
+    .form-col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-2) 0;
+    }
+
+    /* ─── Popup tweaks ────────────────────────────────────────────────── */
+    .leaflet-popup-content-wrapper {
+      border-radius: 8px;
+      box-shadow: var(--shadow-card, 0 2px 8px rgba(0,0,0,.12));
+    }
+
+    .leaflet-popup-content {
+      margin: 10px 14px;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+
+    .popup-desc {
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="shell">
+
+    <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+    <header class="toolbar">
+      <span class="app-name">
+        <wa-icon name="map-location-dot"></wa-icon>
+        Map Explorer
+      </span>
+
+      <!-- Tile-layer picker -->
+      <wa-select id="tile-select" size="s" style="width:180px" value="osm">
+        <wa-option value="osm">OpenStreetMap</wa-option>
+        <wa-option value="topo">OpenTopoMap</wa-option>
+        <wa-option value="satellite">Esri Satellite</wa-option>
+      </wa-select>
+
+      <wa-button size="s" id="btn-add-marker">
+        <wa-icon slot="prefix" name="location-dot"></wa-icon>
+        Add Marker
+      </wa-button>
+
+      <wa-button size="s" variant="neutral" id="btn-fit">
+        <wa-icon slot="prefix" name="expand"></wa-icon>
+        Fit All
+      </wa-button>
+
+      <span class="toolbar-spacer"></span>
+
+      <wa-badge id="marker-count" variant="brand">0 markers</wa-badge>
+    </header>
+
+    <!-- ── Map ──────────────────────────────────────────────────────── -->
+    <div class="map-wrap">
+      <div id="map"></div>
+    </div>
+
+    <!-- ── Side panel ───────────────────────────────────────────────── -->
+    <aside class="detail-panel">
+      <div class="panel-header">Markers</div>
+      <div class="panel-body">
+        <map-marker-list></map-marker-list>
+      </div>
+    </aside>
+
+  </div><!-- /.shell -->
+
+  <!-- ── Add-marker dialog ────────────────────────────────────────── -->
+  <wa-dialog id="add-marker-dialog" label="Add Marker">
+    <div class="form-col">
+      <wa-input  id="new-marker-title" label="Title"       placeholder="e.g. Eiffel Tower"></wa-input>
+      <wa-input  id="new-marker-desc"  label="Description" placeholder="Optional note"></wa-input>
+      <wa-input  id="new-marker-lat"   label="Latitude"    placeholder="48.8584" type="number"></wa-input>
+      <wa-input  id="new-marker-lng"   label="Longitude"   placeholder="2.2945"  type="number"></wa-input>
+    </div>
+    <wa-button slot="footer" appearance="filled" variant="brand"  id="confirm-add-marker">Add</wa-button>
+    <wa-button slot="footer"                     variant="neutral" id="cancel-add-marker">Cancel</wa-button>
+  </wa-dialog>
+
+  <script type="module">
+    // ── Leaflet (loaded from unpkg — no ESM build on esm.sh) ────────────
+    // Leaflet attaches itself to window.L via the UMD bundle.
+    await import('https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js')
+      .catch(() => {
+        // fallback: load UMD version and expose as L
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+          s.onload = resolve; s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      });
+
+    // Resolve Leaflet — ESM export or global fallback
+    const L = (await import('https://unpkg.com/leaflet@1.9.4/dist/leaflet-src.esm.js')
+      .then(m => m.default ?? m)
+      .catch(() => window.L));
+
+    // ── Tile-layer definitions ───────────────────────────────────────────
+    const TILES = {
+      osm: {
+        url:  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        opts: {
+          maxZoom: 19,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        },
+      },
+      topo: {
+        url:  'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+        opts: {
+          maxZoom: 17,
+          attribution: '© OpenTopoMap contributors',
+        },
+      },
+      satellite: {
+        url:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        opts: {
+          maxZoom: 18,
+          attribution: 'Tiles © Esri',
+        },
+      },
+    };
+
+    // ── Seed markers ─────────────────────────────────────────────────────
+    // Each marker: { id, title, description, lat, lng }
+    // Replace these with real data for your domain.
+    const SEED_MARKERS = [
+      { id: 'm1', title: 'Eiffel Tower',        description: 'Iconic iron lattice tower',      lat: 48.8584,  lng:  2.2945  },
+      { id: 'm2', title: 'Colosseum',            description: 'Ancient amphitheatre in Rome',   lat: 41.8902,  lng: 12.4922  },
+      { id: 'm3', title: 'Statue of Liberty',    description: 'Copper statue on Liberty Island',lat: 40.6892,  lng: -74.0445 },
+      { id: 'm4', title: 'Sydney Opera House',   description: 'World-famous performing arts venue', lat: -33.8568, lng: 151.2153 },
+    ];
+
+    // ── State ─────────────────────────────────────────────────────────────
+    let markers   = [...SEED_MARKERS];
+    let leafletMarkers = {};   // id → Leaflet marker instance
+    let activeId  = null;
+
+    // ── Init map ──────────────────────────────────────────────────────────
+    const map = L.map('map', { zoomControl: true });
+
+    let currentTileLayer = L.tileLayer(TILES.osm.url, TILES.osm.opts).addTo(map);
+
+    // Fit to seed markers on load
+    fitAll();
+
+    // ── Render seed markers ───────────────────────────────────────────────
+    markers.forEach(addLeafletMarker);
+
+    // ── <map-marker-list> custom element ─────────────────────────────────
+    // Renders the scrollable marker list in the side panel.
+    class MapMarkerList extends HTMLElement {
+      connectedCallback() { this.render(); }
+
+      render() {
+        if (markers.length === 0) {
+          this.innerHTML = `<p class="empty-state">No markers yet.<br>Click "Add Marker" to place one.</p>`;
+          return;
+        }
+        this.innerHTML = `<div class="marker-list">${
+          markers.map(m => `
+            <div class="marker-item${m.id === activeId ? ' active' : ''}" data-id="${m.id}">
+              <wa-icon name="location-dot" style="color:var(--color-brand);flex-shrink:0"></wa-icon>
+              <div class="marker-item-body">
+                <div class="marker-item-title">${m.title}</div>
+                <div class="marker-item-sub">${m.description || `${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}`}</div>
+              </div>
+              <wa-button size="s" variant="danger" data-del="${m.id}" title="Remove">
+                <wa-icon name="trash"></wa-icon>
+              </wa-button>
+            </div>`).join('')
+        }</div>`;
+
+        // ── Click to fly-to ──
+        this.querySelectorAll('.marker-item').forEach(el => {
+          el.addEventListener('click', e => {
+            if (e.target.closest('[data-del]')) return;
+            const id = el.dataset.id;
+            activeId = id;
+            const m = markers.find(x => x.id === id);
+            map.flyTo([m.lat, m.lng], 13, { duration: 1 });
+            leafletMarkers[id]?.openPopup();
+            this.render();
+          });
+        });
+
+        // ── Delete ──
+        this.querySelectorAll('[data-del]').forEach(btn => {
+          btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const id = btn.dataset.del;
+            removeMarker(id);
+          });
+        });
+      }
+    }
+    customElements.define('map-marker-list', MapMarkerList);
+
+    const listEl  = document.querySelector('map-marker-list');
+    const countEl = document.getElementById('marker-count');
+
+    function syncUI() {
+      listEl.render();
+      countEl.textContent = `${markers.length} marker${markers.length !== 1 ? 's' : ''}`;
+    }
+
+    // ── Add a Leaflet marker ──────────────────────────────────────────────
+    function addLeafletMarker(m) {
+      const lm = L.marker([m.lat, m.lng])
+        .addTo(map)
+        .bindPopup(`
+          <div class="popup-title">${m.title}</div>
+          ${m.description ? `<div class="popup-desc">${m.description}</div>` : ''}
+          <div style="font-size:11px;color:#9ca3af">${m.lat.toFixed(5)}, ${m.lng.toFixed(5)}</div>
+        `);
+      lm.on('click', () => {
+        activeId = m.id;
+        listEl.render();
+      });
+      leafletMarkers[m.id] = lm;
+    }
+
+    // ── Remove a marker ───────────────────────────────────────────────────
+    function removeMarker(id) {
+      if (leafletMarkers[id]) {
+        map.removeLayer(leafletMarkers[id]);
+        delete leafletMarkers[id];
+      }
+      markers = markers.filter(m => m.id !== id);
+      if (activeId === id) activeId = null;
+      syncUI();
+    }
+
+    // ── Fit map to all markers ────────────────────────────────────────────
+    function fitAll() {
+      if (markers.length === 0) {
+        map.setView([20, 0], 2);
+        return;
+      }
+      const bounds = L.latLngBounds(markers.map(m => [m.lat, m.lng]));
+      map.fitBounds(bounds, { padding: [40, 40] });
+    }
+
+    // ── Tile-layer switcher ────────────────────────────────────────────────
+    document.getElementById('tile-select').addEventListener('change', e => {
+      const key = e.target.value;
+      if (!TILES[key]) return;
+      map.removeLayer(currentTileLayer);
+      currentTileLayer = L.tileLayer(TILES[key].url, TILES[key].opts).addTo(map);
+    });
+
+    // ── Fit All button ────────────────────────────────────────────────────
+    document.getElementById('btn-fit').addEventListener('click', fitAll);
+
+    // ── Add-marker dialog ─────────────────────────────────────────────────
+    const dialog   = document.getElementById('add-marker-dialog');
+    const titleIn  = document.getElementById('new-marker-title');
+    const descIn   = document.getElementById('new-marker-desc');
+    const latIn    = document.getElementById('new-marker-lat');
+    const lngIn    = document.getElementById('new-marker-lng');
+
+    // Pre-fill lat/lng from current map centre when dialog opens
+    document.getElementById('btn-add-marker').addEventListener('click', () => {
+      const c = map.getCenter();
+      latIn.value = c.lat.toFixed(5);
+      lngIn.value = c.lng.toFixed(5);
+      dialog.open = true;
+    });
+
+    document.getElementById('cancel-add-marker').addEventListener('click', () => {
+      dialog.open = false;
+    });
+
+    document.getElementById('confirm-add-marker').addEventListener('click', () => {
+      const title = titleIn.value.trim();
+      const lat   = parseFloat(latIn.value);
+      const lng   = parseFloat(lngIn.value);
+      if (!title)              { titleIn.focus(); return; }
+      if (isNaN(lat) || isNaN(lng)) { latIn.focus(); return; }
+      const m = { id: `m-${Date.now()}`, title, description: descIn.value.trim(), lat, lng };
+      markers.push(m);
+      addLeafletMarker(m);
+      syncUI();
+      map.flyTo([lat, lng], 13, { duration: 1 });
+      // Reset form
+      titleIn.value = descIn.value = '';
+      dialog.open = false;
+    });
+
+    // ── Initial UI sync ───────────────────────────────────────────────────
+    syncUI();
+  </script>
+</body>
+</html>

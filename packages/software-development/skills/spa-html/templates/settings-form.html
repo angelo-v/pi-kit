@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings</title>
+
+  <!-- Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-bg: #f9fafb;
+      --color-surface: #ffffff;
+      --color-border: #e5e7eb;
+      --color-primary: #4f46e5;
+      --max-w: 740px;
+      font-family: system-ui, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      background: var(--color-bg);
+    }
+
+    /* === Page header === */
+    .page-header {
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      padding: 1.25rem 1.5rem;
+    }
+
+    .page-header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .page-header p {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    /* === Layout === */
+    .page-body {
+      max-width: var(--max-w);
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    /* === Section card === */
+    .settings-section {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+
+    .settings-section .section-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--color-border);
+      font-weight: 600;
+      font-size: 0.9375rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .settings-section .section-body {
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* === Field row === */
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    /* === Toggle row === */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .toggle-row:last-child { border-bottom: none; }
+
+    .toggle-row .toggle-info .toggle-label {
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+
+    .toggle-row .toggle-info .toggle-desc {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    /* === Footer bar === */
+    .save-bar {
+      position: sticky;
+      bottom: 0;
+      background: var(--color-surface);
+      border-top: 1px solid var(--color-border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="page-header">
+    <h1>Settings</h1>
+    <p>Manage your account and application preferences.</p>
+  </header>
+
+  <div class="page-body">
+
+    <!-- Profile section -->
+    <section class="settings-section">
+      <div class="section-header">
+        <wa-icon name="user"></wa-icon>
+        Profile
+      </div>
+      <div class="section-body">
+        <div class="field-row">
+          <wa-input id="first-name" label="First name" value="Jane"></wa-input>
+          <wa-input id="last-name" label="Last name" value="Smith"></wa-input>
+        </div>
+        <wa-input id="email" label="Email" type="email" value="jane@example.com"></wa-input>
+        <wa-textarea id="bio" label="Bio" rows="3" placeholder="Tell us about yourself…"></wa-textarea>
+      </div>
+    </section>
+
+    <!-- Notifications section -->
+    <section class="settings-section">
+      <div class="section-header">
+        <wa-icon name="bell"></wa-icon>
+        Notifications
+      </div>
+      <div class="section-body">
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Email notifications</div>
+            <div class="toggle-desc">Receive updates and summaries by email</div>
+          </div>
+          <wa-switch id="notif-email" checked></wa-switch>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Push notifications</div>
+            <div class="toggle-desc">Browser push for real-time alerts</div>
+          </div>
+          <wa-switch id="notif-push"></wa-switch>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-label">Weekly digest</div>
+            <div class="toggle-desc">Summary of activity sent every Monday</div>
+          </div>
+          <wa-switch id="notif-digest" checked></wa-switch>
+        </div>
+      </div>
+    </section>
+
+    <!-- Appearance section -->
+    <section class="settings-section">
+      <div class="section-header">
+        <wa-icon name="palette"></wa-icon>
+        Appearance
+      </div>
+      <div class="section-body">
+        <wa-select id="theme" label="Theme" value="system">
+          <wa-option value="system">System default</wa-option>
+          <wa-option value="light">Light</wa-option>
+          <wa-option value="dark">Dark</wa-option>
+        </wa-select>
+        <wa-select id="language" label="Language" value="en">
+          <wa-option value="en">English</wa-option>
+          <wa-option value="de">Deutsch</wa-option>
+          <wa-option value="fr">Français</wa-option>
+        </wa-select>
+      </div>
+    </section>
+
+    <!-- Danger zone -->
+    <section class="settings-section">
+      <div class="section-header" style="color:#dc2626">
+        <wa-icon name="triangle-exclamation"></wa-icon>
+        Danger zone
+      </div>
+      <div class="section-body">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:.875rem;font-weight:500">Delete account</div>
+            <div style="font-size:.75rem;color:#6b7280">Permanently remove your account and all data.</div>
+          </div>
+          <wa-button variant="danger" id="btn-delete">Delete account</wa-button>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="save-bar">
+    <wa-button variant="neutral" id="btn-reset">Reset</wa-button>
+    <wa-button variant="brand" id="btn-save">Save changes</wa-button>
+  </div>
+
+  <!-- Confirm delete dialog -->
+  <wa-dialog id="delete-dialog" label="Delete account?">
+    <p>This action <strong>cannot be undone</strong>. All your data will be permanently deleted.</p>
+    <wa-button slot="footer" variant="neutral" id="btn-delete-cancel">Cancel</wa-button>
+    <wa-button slot="footer" variant="danger" id="btn-delete-confirm">Yes, delete</wa-button>
+  </wa-dialog>
+
+  <script type="module">
+    // === Imports (esm.sh) ===
+    // import something from 'https://esm.sh/package-name@version';
+
+    // === Custom Elements ===
+
+    class SettingsApp extends HTMLElement {
+      connectedCallback() {
+        this.#bindActions();
+      }
+
+      #bindActions() {
+        document.getElementById('btn-save').addEventListener('click', () => this.#save());
+        document.getElementById('btn-reset').addEventListener('click', () => this.#reset());
+
+        const deleteDialog = document.getElementById('delete-dialog');
+        document.getElementById('btn-delete').addEventListener('click', () => deleteDialog.show());
+        document.getElementById('btn-delete-cancel').addEventListener('click', () => deleteDialog.hide());
+        document.getElementById('btn-delete-confirm').addEventListener('click', () => {
+          deleteDialog.hide();
+          // TODO: perform account deletion
+          alert('Account deleted (stub).');
+        });
+      }
+
+      #save() {
+        const data = {
+          firstName: document.getElementById('first-name').value,
+          lastName: document.getElementById('last-name').value,
+          email: document.getElementById('email').value,
+          bio: document.getElementById('bio').value,
+          notifications: {
+            email: document.getElementById('notif-email').checked,
+            push: document.getElementById('notif-push').checked,
+            digest: document.getElementById('notif-digest').checked,
+          },
+          theme: document.getElementById('theme').value,
+          language: document.getElementById('language').value,
+        };
+        localStorage.setItem('settings', JSON.stringify(data));
+        // Show success feedback
+        const alert = Object.assign(document.createElement('wa-alert'), {
+          variant: 'success', duration: 3000, closable: true, open: true,
+          innerHTML: '<wa-icon slot="icon" name="check"></wa-icon>Settings saved.'
+        });
+        document.body.appendChild(alert);
+      }
+
+      #reset() {
+        const saved = JSON.parse(localStorage.getItem('settings') || '{}');
+        if (saved.firstName) document.getElementById('first-name').value = saved.firstName;
+        // ... restore other fields
+      }
+    }
+    customElements.define('settings-app', SettingsApp);
+
+    // === Bootstrap ===
+    document.body.insertAdjacentHTML('afterbegin', '<settings-app></settings-app>');
+  </script>
+</body>
+</html>

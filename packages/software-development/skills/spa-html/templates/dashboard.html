@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+
+  <!-- Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sidebar-width: 220px;
+      --header-height: 56px;
+      --color-bg: #f3f4f6;
+      --color-surface: #ffffff;
+      --color-sidebar: #1e1b4b;
+      --color-sidebar-text: #c7d2fe;
+      --color-sidebar-active: #4f46e5;
+      --color-border: #e5e7eb;
+      --space: 1rem;
+      font-family: system-ui, sans-serif;
+      background: var(--color-bg);
+      color: #111827;
+      line-height: 1.5;
+    }
+
+    /* === Shell === */
+    .shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      grid-template-rows: var(--header-height) 1fr;
+      grid-template-areas:
+        "sidebar header"
+        "sidebar main";
+      min-height: 100dvh;
+    }
+
+    /* === Sidebar === */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--color-sidebar);
+      color: var(--color-sidebar-text);
+      display: flex;
+      flex-direction: column;
+      padding: var(--space);
+      gap: 0.25rem;
+    }
+
+    .sidebar .logo {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #fff;
+      padding: 0.5rem 0 1rem;
+    }
+
+    .sidebar nav a {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      text-decoration: none;
+      color: inherit;
+      font-size: 0.875rem;
+      transition: background 0.15s;
+    }
+
+    .sidebar nav a:hover,
+    .sidebar nav a.active {
+      background: var(--color-sidebar-active);
+      color: #fff;
+    }
+
+    /* === Header === */
+    .header {
+      grid-area: header;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+    }
+
+    .header .page-title {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+
+    .header .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* === Main === */
+    .main {
+      grid-area: main;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    /* === Stat cards === */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+
+    .stat-card .label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-card .value {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #111827;
+      margin-top: 0.25rem;
+    }
+
+    /* === Content panel === */
+    .panel {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      padding: 1.25rem;
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="logo">MyApp</div>
+      <nav>
+        <a href="#" class="active"><wa-icon name="house"></wa-icon> Overview</a>
+        <a href="#"><wa-icon name="chart-bar"></wa-icon> Analytics</a>
+        <a href="#"><wa-icon name="users"></wa-icon> Users</a>
+        <a href="#"><wa-icon name="gear"></wa-icon> Settings</a>
+      </nav>
+    </aside>
+
+    <header class="header">
+      <span class="page-title">Overview</span>
+      <div class="header-actions">
+        <wa-button size="s" variant="brand">
+          <wa-icon slot="prefix" name="plus"></wa-icon>
+          New
+        </wa-button>
+        <wa-avatar label="User"></wa-avatar>
+      </div>
+    </header>
+
+    <main class="main">
+      <app-dashboard></app-dashboard>
+    </main>
+  </div>
+
+  <script type="module">
+    // === Imports (esm.sh) ===
+    // import something from 'https://esm.sh/package-name@version';
+
+    // === Custom Elements ===
+
+    class AppDashboard extends HTMLElement {
+      connectedCallback() {
+        this.innerHTML = `
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="label">Total Users</div>
+              <div class="value">1,284</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Revenue</div>
+              <div class="value">$9,340</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Open Issues</div>
+              <div class="value">42</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Uptime</div>
+              <div class="value">99.9%</div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Recent Activity</h2>
+            <p style="color:#6b7280">No recent activity to show.</p>
+          </div>
+        `;
+      }
+    }
+    customElements.define('app-dashboard', AppDashboard);
+  </script>
+</body>
+</html>

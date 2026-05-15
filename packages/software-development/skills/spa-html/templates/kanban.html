@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban Board</title>
+
+  <!-- Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --color-bg: #f3f4f6;
+      --color-surface: #ffffff;
+      --color-border: #e5e7eb;
+      --col-w: 280px;
+      font-family: system-ui, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      background: var(--color-bg);
+    }
+
+    /* === App shell === */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* === Toolbar === */
+    .toolbar {
+      flex-shrink: 0;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      padding: 0.75rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .toolbar h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    /* === Board === */
+    .board, kanban-board {
+      flex: 1;
+      display: flex;
+      gap: 1rem;
+      padding: 1rem;
+      overflow-x: auto;
+      align-items: flex-start;
+    }
+
+    /* === Column === */
+    .column {
+      flex-shrink: 0;
+      width: var(--col-w);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      max-height: 100%;
+    }
+
+    .column-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .column-header .col-count {
+      margin-left: auto;
+      background: #e5e7eb;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      padding: 0 0.5rem;
+      line-height: 1.5rem;
+    }
+
+    .column-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      min-height: 60px;
+    }
+
+    /* Drop target highlight */
+    .column-body.drag-over {
+      background: #ede9fe;
+      border-radius: 8px;
+    }
+
+    .column-add {
+      padding: 0.5rem;
+      border-top: 1px solid var(--color-border);
+    }
+
+    /* === Card === */
+    .card {
+      background: #f9fafb;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      cursor: grab;
+      user-select: none;
+      transition: box-shadow 0.15s;
+    }
+
+    .card:active { cursor: grabbing; }
+    .card.dragging { opacity: 0.4; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+
+    .card-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      margin-bottom: 0.35rem;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    /* === Add column button === */
+    .add-column-btn {
+      flex-shrink: 0;
+      width: var(--col-w);
+      border: 2px dashed var(--color-border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      color: #9ca3af;
+      font-size: 0.875rem;
+      cursor: pointer;
+      min-height: 80px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .add-column-btn:hover { border-color: #a5b4fc; color: #4f46e5; }
+
+    /* === Form fields in dialog === */
+    .form-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 0.75rem 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="shell">
+    <div class="toolbar">
+      <h1>Kanban Board</h1>
+      <wa-button size="s" variant="neutral" id="btn-add-col">
+        <wa-icon slot="prefix" name="plus"></wa-icon>
+        Add column
+      </wa-button>
+    </div>
+
+    <div class="board" id="board"></div>
+  </div>
+
+  <!-- Card dialog -->
+  <wa-dialog id="card-dialog" label="Add card">
+    <div class="form-fields">
+      <wa-input id="card-title-input" label="Title" placeholder="Card title" required></wa-input>
+      <wa-select id="card-priority" label="Priority" value="medium">
+        <wa-option value="low">Low</wa-option>
+        <wa-option value="medium">Medium</wa-option>
+        <wa-option value="high">High</wa-option>
+      </wa-select>
+    </div>
+    <wa-button slot="footer" variant="neutral" id="card-cancel">Cancel</wa-button>
+    <wa-button slot="footer" variant="brand" id="card-save">Add</wa-button>
+  </wa-dialog>
+
+  <!-- Column dialog -->
+  <wa-dialog id="col-dialog" label="Add column">
+    <div class="form-fields">
+      <wa-input id="col-name-input" label="Column name" placeholder="e.g. In Review" required></wa-input>
+    </div>
+    <wa-button slot="footer" variant="neutral" id="col-cancel">Cancel</wa-button>
+    <wa-button slot="footer" variant="brand" id="col-save">Add</wa-button>
+  </wa-dialog>
+
+  <script type="module">
+    // === Imports (esm.sh) ===
+    // import something from 'https://esm.sh/package-name@version';
+
+    // === State ===
+    const STORAGE_KEY = 'kanban-state';
+
+    const defaultState = {
+      columns: [
+        { id: 'todo', name: 'To Do', cards: [
+          { id: 'c1', title: 'Research competitors', priority: 'medium' },
+          { id: 'c2', title: 'Define user personas', priority: 'high' },
+        ]},
+        { id: 'doing', name: 'In Progress', cards: [
+          { id: 'c3', title: 'Design wireframes', priority: 'high' },
+        ]},
+        { id: 'done', name: 'Done', cards: [
+          { id: 'c4', title: 'Project kick-off meeting', priority: 'low' },
+        ]},
+      ]
+    };
+
+    let state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null') ?? defaultState;
+
+    function persist() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function uid() { return Math.random().toString(36).slice(2); }
+
+    const PRIORITY_COLORS = { low: '#10b981', medium: '#f59e0b', high: '#ef4444' };
+
+    // === Custom Elements ===
+
+    class KanbanBoard extends HTMLElement {
+      connectedCallback() { this.render(); }
+
+      render() {
+        const board = this;
+        board.innerHTML = '';
+
+        state.columns.forEach(col => {
+          const colEl = document.createElement('kanban-column');
+          colEl.dataset.id = col.id;
+          board.appendChild(colEl);
+          colEl.setup(col);
+        });
+
+        // Add column button
+        const addBtn = document.createElement('div');
+        addBtn.className = 'add-column-btn';
+        addBtn.innerHTML = `<wa-icon name="plus"></wa-icon> Add column`;
+        addBtn.addEventListener('click', () => openColDialog());
+        board.appendChild(addBtn);
+      }
+    }
+    customElements.define('kanban-board', KanbanBoard);
+
+    class KanbanColumn extends HTMLElement {
+      #col = null;
+
+      setup(col) {
+        this.#col = col;
+        this.render();
+        this.#setupDrop();
+      }
+
+      render() {
+        const col = this.#col;
+        this.className = 'column';
+        this.innerHTML = `
+          <div class="column-header">
+            ${col.name}
+            <span class="col-count">${col.cards.length}</span>
+          </div>
+          <div class="column-body" data-col="${col.id}">
+            ${col.cards.map(card => `
+              <div class="card" draggable="true" data-id="${card.id}" data-col="${col.id}">
+                <div class="card-title">${card.title}</div>
+                <div class="card-meta">
+                  <wa-badge style="--wa-color-badge-bg:${PRIORITY_COLORS[card.priority]}">${card.priority}</wa-badge>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="column-add">
+            <wa-button size="s" variant="text" data-add="${col.id}" style="width:100%">
+              <wa-icon slot="prefix" name="plus"></wa-icon> Add card
+            </wa-button>
+          </div>
+        `;
+
+        // Card drag
+        this.querySelectorAll('.card').forEach(card => {
+          card.addEventListener('dragstart', e => {
+            e.dataTransfer.setData('cardId', card.dataset.id);
+            e.dataTransfer.setData('fromCol', card.dataset.col);
+            card.classList.add('dragging');
+          });
+          card.addEventListener('dragend', () => card.classList.remove('dragging'));
+        });
+
+        // Add card button
+        this.querySelector('[data-add]').addEventListener('click', () => {
+          openCardDialog(col.id);
+        });
+      }
+
+      #setupDrop() {
+        const body = this.querySelector('.column-body');
+        body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drag-over'); });
+        body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+        body.addEventListener('drop', e => {
+          body.classList.remove('drag-over');
+          const cardId = e.dataTransfer.getData('cardId');
+          const fromColId = e.dataTransfer.getData('fromCol');
+          const toColId = this.#col.id;
+          if (fromColId === toColId) return;
+
+          const fromCol = state.columns.find(c => c.id === fromColId);
+          const toCol = state.columns.find(c => c.id === toColId);
+          const cardIdx = fromCol.cards.findIndex(c => c.id === cardId);
+          const [card] = fromCol.cards.splice(cardIdx, 1);
+          toCol.cards.push(card);
+          persist();
+          boardEl.render();
+        });
+      }
+    }
+    customElements.define('kanban-column', KanbanColumn);
+
+    // === Dialogs ===
+
+    let targetColId = null;
+
+    const cardDialog = document.getElementById('card-dialog');
+    const cardTitleInput = document.getElementById('card-title-input');
+    const cardPriority = document.getElementById('card-priority');
+
+    function openCardDialog(colId) {
+      targetColId = colId;
+      cardTitleInput.value = '';
+      cardPriority.value = 'medium';
+      cardDialog.show();
+    }
+
+    document.getElementById('card-cancel').addEventListener('click', () => cardDialog.hide());
+    document.getElementById('card-save').addEventListener('click', () => {
+      const title = cardTitleInput.value.trim();
+      if (!title) { cardTitleInput.focus(); return; }
+      const col = state.columns.find(c => c.id === targetColId);
+      col.cards.push({ id: uid(), title, priority: cardPriority.value });
+      persist();
+      cardDialog.hide();
+      boardEl.render();
+    });
+
+    const colDialog = document.getElementById('col-dialog');
+    const colNameInput = document.getElementById('col-name-input');
+
+    function openColDialog() {
+      colNameInput.value = '';
+      colDialog.show();
+    }
+
+    document.getElementById('btn-add-col').addEventListener('click', openColDialog);
+    document.getElementById('col-cancel').addEventListener('click', () => colDialog.hide());
+    document.getElementById('col-save').addEventListener('click', () => {
+      const name = colNameInput.value.trim();
+      if (!name) { colNameInput.focus(); return; }
+      state.columns.push({ id: uid(), name, cards: [] });
+      persist();
+      colDialog.hide();
+      boardEl.render();
+    });
+
+    // === Bootstrap ===
+    const boardEl = document.createElement('kanban-board');
+    boardEl.id = 'board';
+    document.getElementById('board').replaceWith(boardEl);
+  </script>
+</body>
+</html>

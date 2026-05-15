@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph Explorer</title>
+
+  <!-- 1. Pollen design tokens (always first) -->
+  <link rel="stylesheet" href="https://esm.sh/pollen-css@5/pollen.css" />
+
+  <!-- 2. Web Awesome -->
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ─── Layer 2: Semantic theme ─────────────────────────────────────── */
+    :root {
+      /* Colour */
+      --color-bg:           var(--color-grey-100);
+      --color-surface:      var(--color-white);
+      --color-border:       var(--color-grey-200);
+      --color-text:         var(--color-grey-900);
+      --color-text-muted:   var(--color-grey-500);
+      --color-brand:        var(--color-indigo-600);
+      --color-brand-light:  var(--color-indigo-50);
+      --color-brand-dark:   var(--color-indigo-800);
+      --color-danger:       var(--color-red-600);
+      --color-success:      var(--color-green-600);
+
+      /* Graph palette — change these two groups to re-skin the graph */
+      --node-bg:            #6366f1;   /* indigo-500 */
+      --node-bg-hover:      #4338ca;   /* indigo-700 */
+      --node-bg-selected:   #f59e0b;   /* amber-400  */
+      --node-border:        #3730a3;   /* indigo-900 */
+      --node-alt-bg:        #0ea5e9;   /* sky-500    */
+      --node-alt-border:    #0369a1;   /* sky-700    */
+      --edge-color:         #9ca3af;   /* grey-400   */
+      --edge-color-selected:#f59e0b;   /* amber-400  */
+
+      /* Typography */
+      --font-body:    var(--font-sans);
+      --text-sm:      var(--scale-00);
+      --text-base:    var(--scale-0);
+      --text-lg:      var(--scale-1);
+      --text-xl:      var(--scale-2);
+      --text-2xl:     var(--scale-3);
+
+      /* Spacing */
+      --space-1:  var(--size-1);
+      --space-2:  var(--size-2);
+      --space-3:  var(--size-3);
+      --space-4:  var(--size-4);
+      --space-6:  var(--size-6);
+      --space-8:  var(--size-8);
+
+      /* Surface */
+      --radius:       var(--radius-md);
+      --radius-lg:    var(--radius-lg);
+      --shadow:       var(--shadow-xs);
+      --shadow-card:  var(--shadow-sm);
+
+      /* Layout */
+      --toolbar-h:  56px;
+      --panel-w:    280px;
+      --z-toolbar:  var(--layer-3);
+      --z-overlay:  var(--layer-4);
+
+      /* Transitions */
+      --ease:      var(--ease-out-cubic);
+      --duration:  150ms;
+
+      font-family: var(--font-body);
+      background:  var(--color-bg);
+      color:       var(--color-text);
+      line-height: 1.5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg:         var(--color-grey-950);
+        --color-surface:    var(--color-grey-900);
+        --color-border:     var(--color-grey-700);
+        --color-text:       var(--color-grey-50);
+        --color-text-muted: var(--color-grey-400);
+        --node-bg:          #818cf8;   /* indigo-400 */
+        --edge-color:       #4b5563;   /* grey-600   */
+      }
+    }
+
+    /* ─── Shell layout ────────────────────────────────────────────────── */
+    .shell {
+      display: grid;
+      grid-template-rows: var(--toolbar-h) 1fr;
+      grid-template-columns: 1fr var(--panel-w);
+      grid-template-areas:
+        "toolbar toolbar"
+        "canvas  panel";
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ─── Toolbar ─────────────────────────────────────────────────────── */
+    .toolbar {
+      grid-area: toolbar;
+      z-index: var(--z-toolbar);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 0 var(--space-4);
+    }
+
+    .toolbar .app-name {
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--color-brand);
+      margin-right: var(--space-4);
+      white-space: nowrap;
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    .legend {
+      display: flex;
+      gap: var(--space-4);
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,.15);
+    }
+
+    /* ─── Graph canvas ────────────────────────────────────────────────── */
+    .canvas-wrap {
+      grid-area: canvas;
+      position: relative;
+      overflow: hidden;
+      background: var(--color-bg);
+    }
+
+    #cy {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Zoom overlay */
+    .zoom-controls {
+      position: absolute;
+      bottom: var(--space-4);
+      left:   var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      z-index: var(--z-toolbar);
+    }
+
+    /* ─── Detail panel ────────────────────────────────────────────────── */
+    .detail-panel {
+      grid-area: panel;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-text-muted);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-4);
+    }
+
+    .detail-empty {
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      text-align: center;
+      padding-top: var(--space-8);
+    }
+
+    .detail-prop {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      margin-bottom: var(--space-4);
+    }
+
+    .detail-prop .prop-label {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      font-weight: 500;
+    }
+
+    .detail-prop .prop-value {
+      font-size: var(--text-base);
+      color: var(--color-text);
+      word-break: break-word;
+    }
+
+    /* ─── Add-node dialog ─────────────────────────────────────────────── */
+    .form-col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      padding: var(--space-2) 0;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="shell">
+
+    <!-- ── Toolbar ──────────────────────────────────────────────────── -->
+    <header class="toolbar">
+      <span class="app-name">
+        <wa-icon name="diagram-project"></wa-icon>
+        Graph Explorer
+      </span>
+
+      <!-- Layout algorithm picker -->
+      <wa-select id="layout-select" size="small" style="width:170px" value="cose">
+        <wa-option value="cose">Force-directed</wa-option>
+        <wa-option value="breadthfirst">Breadth-first</wa-option>
+        <wa-option value="circle">Circle</wa-option>
+        <wa-option value="grid">Grid</wa-option>
+        <wa-option value="concentric">Concentric</wa-option>
+      </wa-select>
+
+      <wa-button size="small" id="btn-add-node">
+        <wa-icon slot="prefix" name="circle-plus"></wa-icon>
+        Add Node
+      </wa-button>
+
+      <wa-button size="small" variant="neutral" id="btn-fit">
+        <wa-icon slot="prefix" name="expand"></wa-icon>
+        Fit
+      </wa-button>
+
+      <wa-button size="small" variant="neutral" id="btn-export">
+        <wa-icon slot="prefix" name="download"></wa-icon>
+        Export PNG
+      </wa-button>
+
+      <span class="toolbar-spacer"></span>
+
+      <!-- Legend -->
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--node-bg);"></div>
+          Person
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--node-alt-bg);"></div>
+          Project
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--node-bg-selected);border-radius:3px;"></div>
+          Selected
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Graph canvas ──────────────────────────────────────────────── -->
+    <div class="canvas-wrap">
+      <div id="cy"></div>
+      <div class="zoom-controls">
+        <wa-button size="small" variant="neutral" id="btn-zoom-in"  title="Zoom in">
+          <wa-icon name="plus"></wa-icon>
+        </wa-button>
+        <wa-button size="small" variant="neutral" id="btn-zoom-out" title="Zoom out">
+          <wa-icon name="minus"></wa-icon>
+        </wa-button>
+      </div>
+    </div>
+
+    <!-- ── Detail panel ──────────────────────────────────────────────── -->
+    <aside class="detail-panel">
+      <div class="panel-header">Selection</div>
+      <div class="panel-body">
+        <graph-detail></graph-detail>
+      </div>
+    </aside>
+
+  </div><!-- /.shell -->
+
+  <!-- ── Add-node dialog ───────────────────────────────────────────── -->
+  <wa-dialog id="add-node-dialog" label="Add Node">
+    <div class="form-col">
+      <wa-input id="new-node-label" label="Label"      placeholder="e.g. Alice"></wa-input>
+      <wa-input id="new-node-group" label="Group/type" placeholder="e.g. person"></wa-input>
+    </div>
+    <wa-button slot="footer" appearance="filled" variant="brand"   id="confirm-add-node">Add</wa-button>
+    <wa-button slot="footer"                     variant="neutral"  id="cancel-add-node">Cancel</wa-button>
+  </wa-dialog>
+
+  <script type="module">
+    // ── Imports ──────────────────────────────────────────────────────────
+    import cytoscape from 'https://esm.sh/cytoscape@3';
+
+    // ── Seed data ────────────────────────────────────────────────────────
+    // Each node needs: data.id (unique), data.label (display text),
+    //                  data.group (optional, drives node style variant).
+    // Each edge needs: data.id, data.source, data.target,
+    //                  data.label (optional).
+    const SEED_ELEMENTS = [
+      // Nodes
+      { data: { id: 'alice',  label: 'Alice',     group: 'person'  } },
+      { data: { id: 'bob',    label: 'Bob',       group: 'person'  } },
+      { data: { id: 'carol',  label: 'Carol',     group: 'person'  } },
+      { data: { id: 'proj-a', label: 'Project A', group: 'project' } },
+      { data: { id: 'proj-b', label: 'Project B', group: 'project' } },
+      // Edges
+      { data: { id: 'e1', source: 'alice', target: 'proj-a', label: 'leads'       } },
+      { data: { id: 'e2', source: 'bob',   target: 'proj-a', label: 'contributes' } },
+      { data: { id: 'e3', source: 'carol', target: 'proj-b', label: 'leads'       } },
+      { data: { id: 'e4', source: 'alice', target: 'bob',    label: 'manages'     } },
+    ];
+
+    // ── Cytoscape stylesheet ─────────────────────────────────────────────
+    // Colours reference CSS variable values resolved at init time.
+    // To re-theme, update the --node-* / --edge-* vars in :root above.
+    const ROOT = getComputedStyle(document.documentElement);
+    const v = name => ROOT.getPropertyValue(name).trim();
+
+    const CY_STYLE = [
+      {
+        selector: 'node',
+        style: {
+          'background-color': v('--node-bg'),
+          'border-color':     v('--node-border'),
+          'border-width':     2,
+          'color':            '#ffffff',
+          'label':            'data(label)',
+          'text-valign':      'center',
+          'text-halign':      'center',
+          'font-size':        12,
+          'font-family':      'system-ui, sans-serif',
+          'font-weight':      600,
+          'padding':          10,
+          'width':            'label',
+          'height':           36,
+          'shape':            'round-rectangle',
+          'text-wrap':        'wrap',
+          'text-max-width':   130,
+        }
+      },
+      {
+        // Alternate style for nodes where group === "project"
+        selector: 'node[group = "project"]',
+        style: {
+          'background-color': v('--node-alt-bg'),
+          'border-color':     v('--node-alt-border'),
+          'shape':            'ellipse',
+        }
+      },
+      {
+        selector: 'node:selected',
+        style: {
+          'background-color': v('--node-bg-selected'),
+          'border-color':     '#b45309',
+          'color':            '#1c1917',
+        }
+      },
+      {
+        selector: 'node:active',
+        style: { 'overlay-opacity': 0.08 }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width':              2,
+          'line-color':         v('--edge-color'),
+          'target-arrow-color': v('--edge-color'),
+          'target-arrow-shape': 'triangle',
+          'curve-style':        'bezier',
+          'label':              'data(label)',
+          'font-size':          10,
+          'color':              '#6b7280',
+          'text-background-color':   '#ffffff',
+          'text-background-opacity': 0.85,
+          'text-background-padding': '2px',
+        }
+      },
+      {
+        selector: 'edge:selected',
+        style: {
+          'line-color':         v('--edge-color-selected'),
+          'target-arrow-color': v('--edge-color-selected'),
+          'color':              '#92400e',
+        }
+      },
+    ];
+
+    // ── Init Cytoscape ───────────────────────────────────────────────────
+    const cy = cytoscape({
+      container:        document.getElementById('cy'),
+      elements:         SEED_ELEMENTS,
+      style:            CY_STYLE,
+      layout:           { name: 'cose', padding: 60, animate: true },
+      wheelSensitivity: 0.3,
+    });
+
+    // ── <graph-detail> custom element ────────────────────────────────────
+    // Renders selected node / edge metadata in the right panel.
+    class GraphDetail extends HTMLElement {
+      #selected = null;
+
+      connectedCallback() { this.#render(); }
+
+      show(el) { this.#selected = el; this.#render(); }
+      clear()  { this.#selected = null; this.#render(); }
+
+      #render() {
+        if (!this.#selected) {
+          this.innerHTML = `<p class="detail-empty">Click a node or edge to inspect it.</p>`;
+          return;
+        }
+        const d      = this.#selected.data();
+        const isEdge = this.#selected.isEdge();
+        const rows   = isEdge
+          ? [
+              { label: 'Type',    value: 'Edge'           },
+              { label: 'ID',      value: d.id             },
+              { label: 'Source',  value: d.source         },
+              { label: 'Target',  value: d.target         },
+              { label: 'Label',   value: d.label  || '—'  },
+            ]
+          : [
+              { label: 'Type',    value: 'Node'                                    },
+              { label: 'ID',      value: d.id                                      },
+              { label: 'Label',   value: d.label  || '—'                           },
+              { label: 'Group',   value: d.group  || '—'                           },
+              { label: 'Degree',  value: this.#selected.connectedEdges().length    },
+            ];
+
+        const propsHtml = rows.map(r => `
+          <div class="detail-prop">
+            <span class="prop-label">${r.label}</span>
+            <span class="prop-value">${r.value}</span>
+          </div>`).join('');
+
+        const actionsHtml = isEdge
+          ? `<wa-button size="small" variant="danger" id="btn-del">
+               <wa-icon slot="prefix" name="trash"></wa-icon> Remove Edge
+             </wa-button>`
+          : `<wa-button size="small" variant="danger" id="btn-del">
+               <wa-icon slot="prefix" name="trash"></wa-icon> Remove Node
+             </wa-button>`;
+
+        this.innerHTML = propsHtml + actionsHtml;
+        this.querySelector('#btn-del').addEventListener('click', () => {
+          cy.remove(this.#selected);
+          this.clear();
+        });
+      }
+    }
+    customElements.define('graph-detail', GraphDetail);
+
+    // ── Detail panel wiring ───────────────────────────────────────────────
+    const detail = document.querySelector('graph-detail');
+    cy.on('select',   'node, edge', e  => detail.show(e.target));
+    cy.on('unselect', 'node, edge', () => detail.clear());
+    cy.on('remove',                 () => detail.clear());
+
+    // ── Layout picker ─────────────────────────────────────────────────────
+    document.getElementById('layout-select').addEventListener('change', e => {
+      cy.layout({ name: e.target.value, padding: 60, animate: true }).run();
+    });
+
+    // ── Zoom controls ─────────────────────────────────────────────────────
+    const midPt = () => ({ x: cy.width() / 2, y: cy.height() / 2 });
+    document.getElementById('btn-zoom-in').addEventListener('click',
+      () => cy.zoom({ level: cy.zoom() * 1.25, renderedPosition: midPt() }));
+    document.getElementById('btn-zoom-out').addEventListener('click',
+      () => cy.zoom({ level: cy.zoom() * 0.80, renderedPosition: midPt() }));
+    document.getElementById('btn-fit').addEventListener('click',
+      () => cy.fit(undefined, 40));
+
+    // ── Export PNG ────────────────────────────────────────────────────────
+    document.getElementById('btn-export').addEventListener('click', () => {
+      const blob = cy.png({ output: 'blob', bg: '#f3f4f6', scale: 2 });
+      const url  = URL.createObjectURL(blob);
+      Object.assign(document.createElement('a'), { href: url, download: 'graph.png' }).click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ── Add-node dialog ────────────────────────────────────────────────────
+    const dialog  = document.getElementById('add-node-dialog');
+    const labelIn = document.getElementById('new-node-label');
+    const groupIn = document.getElementById('new-node-group');
+
+    document.getElementById('btn-add-node').addEventListener('click',  () => dialog.open = true);
+    document.getElementById('cancel-add-node').addEventListener('click', () => dialog.open = false);
+
+    document.getElementById('confirm-add-node').addEventListener('click', () => {
+      const label = labelIn.value.trim();
+      if (!label) { labelIn.focus(); return; }
+      const id    = `node-${Date.now()}`;
+      const group = groupIn.value.trim() || 'default';
+      cy.add({ data: { id, label, group } });
+      cy.layout({
+        name:    document.getElementById('layout-select').value,
+        padding: 60,
+        animate: true,
+      }).run();
+      labelIn.value = '';
+      groupIn.value = '';
+      dialog.open = false;
+    });
+  </script>
+</body>
+</html>
