@@ -1,0 +1,7 @@
+@prefix schema: <http://schema.org/> .
+@prefix ical:   <http://www.w3.org/2002/12/cal/ical#> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+<#it> a schema:Action, ical:Vtodo ;
+    schema:name "A task"^^xsd:string ;
+    schema:actionStatus schema:PotentialActionStatus .

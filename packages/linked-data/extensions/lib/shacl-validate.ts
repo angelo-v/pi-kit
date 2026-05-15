@@ -7,6 +7,7 @@
  */
 
 import * as nodeFs from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { Parser } from "n3";
 // @ts-ignore
 import { Validator } from "shacl-engine";
@@ -69,8 +70,9 @@ function extractPathLabel(path: unknown): string {
 }
 
 /** Parse a Turtle string into an RDF/JS DatasetCore. */
-function parseTurtleToDataset(turtle: string): Iterable<unknown> & { add(q: unknown): void } {
-  const parser = new Parser({ format: "Turtle" });
+function parseTurtleToDataset(turtle: string, filePath?: string): Iterable<unknown> & { add(q: unknown): void } {
+  const baseIRI = filePath ? pathToFileURL(filePath).href : undefined;
+  const parser = new Parser({ format: "Turtle", ...(baseIRI ? { baseIRI } : {}) });
   const quads = parser.parse(turtle);
   const ds = (rdfDataset as { dataset(): unknown }).dataset() as Iterable<unknown> & { add(q: unknown): void };
   for (const q of quads) ds.add(q);
@@ -102,8 +104,8 @@ export async function validateShacl(
   );
   const shapesDataset = (rdfDataset as { dataset(): unknown }).dataset() as
     Iterable<unknown> & { add(q: unknown): void };
-  for (const turtle of shapesTurtles) {
-    for (const quad of parseTurtleToDataset(turtle)) shapesDataset.add(quad);
+  for (let i = 0; i < shapesTurtles.length; i++) {
+    for (const quad of parseTurtleToDataset(shapesTurtles[i], options.shapesFiles[i])) shapesDataset.add(quad);
   }
 
   // Load and merge all data files
@@ -112,8 +114,8 @@ export async function validateShacl(
   );
   const dataDataset = (rdfDataset as { dataset(): unknown }).dataset() as
     Iterable<unknown> & { add(q: unknown): void };
-  for (const turtle of dataTurtles) {
-    for (const quad of parseTurtleToDataset(turtle)) dataDataset.add(quad);
+  for (let i = 0; i < dataTurtles.length; i++) {
+    for (const quad of parseTurtleToDataset(dataTurtles[i], options.dataFiles[i])) dataDataset.add(quad);
   }
 
   // shacl-engine with full SPARQL support

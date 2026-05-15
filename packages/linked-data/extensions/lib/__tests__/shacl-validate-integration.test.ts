@@ -126,6 +126,52 @@ describe("integration: sh:SPARQLTarget", () => {
   });
 });
 
+// ── Relative IRI isolation (regression: baseIRI fix) ────────────────────────
+
+describe("integration: relative IRI isolation across files", () => {
+  it("reports violations for a file whose <#it> is missing required properties, even when another file's <#it> supplies them", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("relative-iri-a.ttl"), F("relative-iri-b.ttl")],
+      shapesFiles: [F("relative-iri.shapes.ttl")],
+    });
+    // file-a is missing schema:name and schema:actionStatus → must NOT conform
+    expect(result.conforms).toBe(false);
+    expect(result.violations.length).toBeGreaterThan(0);
+  });
+
+  it("violation focus node belongs to file-a, not file-b", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("relative-iri-a.ttl"), F("relative-iri-b.ttl")],
+      shapesFiles: [F("relative-iri.shapes.ttl")],
+    });
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    // Each <#it> must resolve to the file-scoped IRI (file:///…/relative-iri-a.ttl#it)
+    expect(focusNodes.some((fn) => fn.includes("relative-iri-a.ttl"))).toBe(true);
+  });
+
+  it("file-b's <#it> node is not a violation focus node", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("relative-iri-a.ttl"), F("relative-iri-b.ttl")],
+      shapesFiles: [F("relative-iri.shapes.ttl")],
+    });
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("relative-iri-b.ttl"))).toBe(false);
+  });
+
+  it("does not report spurious maxCount violations caused by merged nodes", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("relative-iri-a.ttl"), F("relative-iri-b.ttl")],
+      shapesFiles: [F("relative-iri.shapes.ttl")],
+    });
+    // Without the fix, both files' properties pile up on one node, causing
+    // maxCount=1 violations. With the fix there must be none.
+    const maxCountViolations = result.violations.filter((v) =>
+      v.message.toLowerCase().includes("more than 1")
+    );
+    expect(maxCountViolations).toHaveLength(0);
+  });
+});
+
 // ── sh:sparql constraint ──────────────────────────────────────────────────────
 
 describe("integration: sh:sparql constraint", () => {

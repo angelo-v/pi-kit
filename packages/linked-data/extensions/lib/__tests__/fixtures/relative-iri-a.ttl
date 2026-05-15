@@ -1,0 +1,4 @@
+@prefix schema: <http://schema.org/> .
+@prefix ical:   <http://www.w3.org/2002/12/cal/ical#> .
+
+<#it> a schema:Action, ical:Vtodo .
