@@ -40,6 +40,22 @@ shapes/BookShape.shacl.ttl
 
 Plain `.ttl` files are treated as data by default and are **not** auto-discovered as shapes.
 
+## SHACL feature support
+
+The validator uses **`shacl-engine`** with full SPARQL support enabled:
+
+| Feature | Supported |
+|---|---|
+| `sh:targetClass` | ✅ |
+| `sh:targetNode` | ✅ |
+| `sh:targetSubjectsOf` | ✅ |
+| `sh:targetObjectsOf` | ✅ |
+| `sh:SPARQLTarget` (`sh:target` + `sh:select`) | ✅ |
+| `sh:sparql` constraint components | ✅ |
+| SHACL Core constraint components | ✅ |
+
+> **Note:** SPARQL queries inside `sh:select` or `sh:sparql` must include their own `PREFIX` declarations — they are not inherited from the surrounding Turtle file.
+
 ## Important rules
 
 - Never claim a graph conforms without actually running `rdf_validate`.

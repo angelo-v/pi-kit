@@ -351,3 +351,174 @@ describe("formatValidationResult", () => {
     expect(text).toMatch(/1 violation[^s]/);
   });
 });
+
+// ── validateShacl: sh:SPARQLTarget ────────────────────────────────────────────
+
+const SPARQL_TARGET_SHAPE = `
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix ex:  <http://example.org/> .
+
+ex:ActivePersonShape
+  a sh:NodeShape ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:select """
+      PREFIX ex: <http://example.org/>
+      SELECT ?this WHERE {
+        ?this a ex:Person .
+        ?this ex:active true .
+      }
+    """
+  ] ;
+  sh:property [
+    sh:path ex:name ;
+    sh:minCount 1 ;
+  ] .
+`;
+
+// alice: active, no name  → focus node, violation
+// bob:   active, has name → focus node, conforms
+// carol: inactive         → not a focus node, ignored
+const SPARQL_TARGET_DATA_VIOLATION = `
+@prefix ex:  <http://example.org/> .
+ex:alice  a ex:Person ; ex:active true .
+ex:bob    a ex:Person ; ex:active true  ; ex:name "Bob" .
+ex:carol  a ex:Person ; ex:active false ; ex:name "Carol" .
+`;
+
+// all active persons have names → conforms
+const SPARQL_TARGET_DATA_CONFORMS = `
+@prefix ex:  <http://example.org/> .
+ex:alice a ex:Person ; ex:active true  ; ex:name "Alice" .
+ex:carol a ex:Person ; ex:active false .
+`;
+
+describe("validateShacl: sh:SPARQLTarget", () => {
+  it("selects only matching focus nodes via SPARQL SELECT", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_TARGET_SHAPE,
+      "/data.ttl":   SPARQL_TARGET_DATA_VIOLATION,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    // carol is inactive → must NOT appear as a focus node
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("carol"))).toBe(false);
+  });
+
+  it("reports a violation for an active person without a name", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_TARGET_SHAPE,
+      "/data.ttl":   SPARQL_TARGET_DATA_VIOLATION,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    expect(result.conforms).toBe(false);
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("alice"))).toBe(true);
+  });
+
+  it("does not report a violation for an active person with a name", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_TARGET_SHAPE,
+      "/data.ttl":   SPARQL_TARGET_DATA_VIOLATION,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("bob"))).toBe(false);
+  });
+
+  it("conforms when all SPARQL-selected nodes satisfy the shape", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_TARGET_SHAPE,
+      "/data.ttl":   SPARQL_TARGET_DATA_CONFORMS,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    expect(result.conforms).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});
+
+// ── validateShacl: sh:sparql constraint ───────────────────────────────────────
+
+const SPARQL_CONSTRAINT_SHAPE = `
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix ex:   <http://example.org/> .
+
+ex:UniqueEmailShape
+  a sh:NodeShape ;
+  sh:targetClass ex:Person ;
+  sh:sparql [
+    sh:message "Email address must be unique across all persons." ;
+    sh:select """
+      PREFIX ex: <http://example.org/>
+      SELECT $this WHERE {
+        $this ex:email ?email .
+        ?other ex:email ?email .
+        FILTER (?other != $this)
+      }
+    """
+  ] .
+`;
+
+const SPARQL_CONSTRAINT_DATA_VIOLATION = `
+@prefix ex: <http://example.org/> .
+ex:alice a ex:Person ; ex:email "a@example.org" .
+ex:bob   a ex:Person ; ex:email "a@example.org" .
+`;
+
+const SPARQL_CONSTRAINT_DATA_CONFORMS = `
+@prefix ex: <http://example.org/> .
+ex:alice a ex:Person ; ex:email "alice@example.org" .
+ex:bob   a ex:Person ; ex:email "bob@example.org" .
+`;
+
+describe("validateShacl: sh:sparql constraint", () => {
+  it("reports a violation when the SPARQL constraint is triggered", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_CONSTRAINT_SHAPE,
+      "/data.ttl":   SPARQL_CONSTRAINT_DATA_VIOLATION,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    expect(result.conforms).toBe(false);
+    expect(result.violations.length).toBeGreaterThan(0);
+  });
+
+  it("includes the custom sh:message in the violation", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_CONSTRAINT_SHAPE,
+      "/data.ttl":   SPARQL_CONSTRAINT_DATA_VIOLATION,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    expect(result.violations[0].message).toContain("unique");
+  });
+
+  it("conforms when the SPARQL constraint is not triggered", async () => {
+    const fs = makeFs({
+      "/shapes.ttl": SPARQL_CONSTRAINT_SHAPE,
+      "/data.ttl":   SPARQL_CONSTRAINT_DATA_CONFORMS,
+    });
+    const result = await validateShacl(
+      { dataFiles: ["/data.ttl"], shapesFiles: ["/shapes.ttl"] },
+      fs
+    );
+    expect(result.conforms).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});

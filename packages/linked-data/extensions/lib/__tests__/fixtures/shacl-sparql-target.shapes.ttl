@@ -1,0 +1,22 @@
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix ex:  <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# Only validate books that are marked as ex:published true
+ex:PublishedBookShape
+  a sh:NodeShape ;
+  sh:target [
+    a sh:SPARQLTarget ;
+    sh:select """
+      PREFIX ex: <http://example.org/>
+      SELECT ?this WHERE {
+        ?this a ex:Book .
+        ?this ex:published true .
+      }
+    """ ;
+  ] ;
+  sh:property [
+    sh:path ex:isbn ;
+    sh:minCount 1 ;
+    sh:message "A published book must have an ex:isbn." ;
+  ] .

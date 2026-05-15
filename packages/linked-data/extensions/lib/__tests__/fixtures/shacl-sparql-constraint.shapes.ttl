@@ -1,0 +1,18 @@
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix ex:  <http://example.org/> .
+
+# ISBN must be unique across all books
+ex:UniqueIsbnShape
+  a sh:NodeShape ;
+  sh:targetClass ex:Book ;
+  sh:sparql [
+    sh:message "ISBN must be unique — another book shares this ISBN." ;
+    sh:select """
+      PREFIX ex: <http://example.org/>
+      SELECT $this WHERE {
+        $this ex:isbn ?isbn .
+        ?other ex:isbn ?isbn .
+        FILTER (?other != $this)
+      }
+    """ ;
+  ] .

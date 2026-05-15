@@ -1,0 +1,9 @@
+# book1: published, no isbn    → violation
+# book2: published, has isbn   → conforms
+# book3: not published, no isbn → ignored by SPARQLTarget
+@prefix ex:  <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+ex:book1 a ex:Book ; rdfs:label "Book One"   ; ex:published true .
+ex:book2 a ex:Book ; rdfs:label "Book Two"   ; ex:published true  ; ex:isbn "978-0-00-000001-1" .
+ex:book3 a ex:Book ; rdfs:label "Book Three" ; ex:published false .

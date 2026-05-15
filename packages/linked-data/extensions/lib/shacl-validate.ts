@@ -6,14 +6,16 @@
  * touching the real filesystem.
  */
 
-import * as nodePath from "node:path";
 import * as nodeFs from "node:fs/promises";
 import { Parser } from "n3";
-// @ts-ignore — rdf-validate-shacl ships plain JS; typedefs are available but
-// the module resolution for the default export is via its index.js
-import SHACLValidator from "rdf-validate-shacl";
 // @ts-ignore
-import factory from "rdf-validate-shacl/src/defaultEnv.js";
+import { Validator } from "shacl-engine";
+// @ts-ignore
+import { targetResolvers, validations } from "shacl-engine/sparql.js";
+// @ts-ignore
+import dataModel from "@rdfjs/data-model";
+// @ts-ignore
+import rdfDataset from "@rdfjs/dataset";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -56,27 +58,31 @@ function severityLabel(iri: string): string {
   return sep >= 0 ? iri.slice(sep + 1) : iri;
 }
 
-/** Short human-readable label for a path IRI or blank-node. */
-function pathLabel(term: unknown): string {
-  if (!term) return "";
-  const t = term as { value?: string; termType?: string };
-  if (t.termType === "BlankNode") return "";
-  return t.value ?? "";
+/**
+ * Extract a human-readable path label from a shacl-engine path structure.
+ * The path is an array of step objects; we return the first predicate IRI.
+ */
+function extractPathLabel(path: unknown): string {
+  if (!path || !Array.isArray(path) || path.length === 0) return "";
+  const step = path[0] as { predicates?: Array<{ value?: string }> };
+  return step.predicates?.[0]?.value ?? "";
 }
 
-/** Parse a Turtle string into an RDF/JS DatasetCore using the shared factory. */
-function parseTurtleToDataset(turtle: string): unknown {
+/** Parse a Turtle string into an RDF/JS DatasetCore. */
+function parseTurtleToDataset(turtle: string): Iterable<unknown> & { add(q: unknown): void } {
   const parser = new Parser({ format: "Turtle" });
   const quads = parser.parse(turtle);
-  // factory.dataset accepts an iterable of quads
-  return (factory as { dataset(quads: unknown[]): unknown }).dataset(quads);
+  const ds = (rdfDataset as { dataset(): unknown }).dataset() as Iterable<unknown> & { add(q: unknown): void };
+  for (const q of quads) ds.add(q);
+  return ds;
 }
 
 // ── Core function ─────────────────────────────────────────────────────────────
 
 /**
  * Validates `options.dataFiles` against `options.shapesFiles` using the
- * `rdf-validate-shacl` SHACL engine.
+ * `shacl-engine` SHACL engine with full SPARQL support
+ * (`sh:SPARQLTarget`, `sh:sparql` constraints).
  *
  * All files are read and merged before validation:
  * - All shapes files are unioned into a single shapes graph.
@@ -94,49 +100,50 @@ export async function validateShacl(
   const shapesTurtles = await Promise.all(
     options.shapesFiles.map((f) => fs.readFile(f, "utf8"))
   );
-  const shapesDataset = (factory as {
-    dataset(quads: unknown[]): unknown;
-  }).dataset([]);
+  const shapesDataset = (rdfDataset as { dataset(): unknown }).dataset() as
+    Iterable<unknown> & { add(q: unknown): void };
   for (const turtle of shapesTurtles) {
-    const ds = parseTurtleToDataset(turtle);
-    // Merge: iterate over the dataset and add each quad
-    for (const quad of ds as Iterable<unknown>) {
-      (shapesDataset as { add(q: unknown): void }).add(quad);
-    }
+    for (const quad of parseTurtleToDataset(turtle)) shapesDataset.add(quad);
   }
 
   // Load and merge all data files
   const dataTurtles = await Promise.all(
     options.dataFiles.map((f) => fs.readFile(f, "utf8"))
   );
-  const dataDataset = (factory as {
-    dataset(quads: unknown[]): unknown;
-  }).dataset([]);
+  const dataDataset = (rdfDataset as { dataset(): unknown }).dataset() as
+    Iterable<unknown> & { add(q: unknown): void };
   for (const turtle of dataTurtles) {
-    const ds = parseTurtleToDataset(turtle);
-    for (const quad of ds as Iterable<unknown>) {
-      (dataDataset as { add(q: unknown): void }).add(quad);
-    }
+    for (const quad of parseTurtleToDataset(turtle)) dataDataset.add(quad);
   }
 
-  const validator = new SHACLValidator(shapesDataset, { factory });
-  const report = await validator.validate(dataDataset);
+  // shacl-engine with full SPARQL support
+  const validator = new (Validator as new (
+    shapes: unknown,
+    opts: unknown
+  ) => { validate(data: unknown): Promise<unknown> })(shapesDataset, {
+    factory: dataModel,
+    targetResolvers, // enables sh:SPARQLTarget (sh:target + sh:select)
+    validations,     // enables sh:sparql constraint components
+  });
 
-  const violations: ValidationViolation[] = report.results.map(
-    (r: {
+  const report = await validator.validate({ dataset: dataDataset }) as {
+    conforms: boolean;
+    results: Array<{
       focusNode?: { value?: string };
-      path?: { value?: string; termType?: string };
+      path?: unknown;
       message?: Array<{ value?: string }>;
       severity?: { value?: string };
-    }) => ({
-      focusNode: r.focusNode?.value ?? "",
-      resultPath: pathLabel(r.path),
-      message: (r.message ?? []).map((m) => m.value ?? "").join("; "),
-      severity: severityLabel(r.severity?.value ?? ""),
-    })
-  );
+    }>;
+  };
 
-  return { conforms: report.conforms as boolean, violations };
+  const violations: ValidationViolation[] = report.results.map((r) => ({
+    focusNode: r.focusNode?.value ?? "",
+    resultPath: extractPathLabel(r.path),
+    message: (r.message ?? []).map((m) => m.value ?? "").join("; "),
+    severity: severityLabel(r.severity?.value ?? ""),
+  }));
+
+  return { conforms: report.conforms, violations };
 }
 
 // ── Formatting helpers (used by the extension entry-point) ────────────────────
