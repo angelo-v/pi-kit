@@ -1,0 +1,41 @@
+{
+  "name": "@aveltens/pi-kit-software-development",
+  "version": "0.1.0",
+  "description": "Pi Coding Agent skills and extensions for software development",
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Angelo Veltens",
+    "email": "inbox+github.com@veltens.org",
+    "url": "https://angelo.veltens.org/profile/card#me"
+  },
+  "type": "module",
+  "files": [
+    "extensions/**/*.ts",
+    "!extensions/**/__tests__",
+    "skills"
+  ],
+  "scripts": {
+    "test": "vitest"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/angelo-v/pi-kit",
+    "directory": "packages/software-development"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/"
+    ],
+    "skills": [
+      "skills/"
+    ]
+  }
+}
