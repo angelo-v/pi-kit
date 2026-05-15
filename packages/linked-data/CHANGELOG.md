@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `shacl_create_shape` tool — the LLM designs a SHACL NodeShape from context and writes it directly to a validated Turtle file.
 - `wikidata_search` tool — resolves free-text entity or property names to Wikidata Q/P IDs via the MediaWiki `wbsearchentities` API. Eliminates the 1–3 SPARQL label-lookup round-trips previously needed before every query.
 
 ### Changed
