@@ -10,6 +10,23 @@ description: Use this skill whenever the user asks about real-world facts that c
 **Follow every step below for every query — even when the entity or its Q-number seems obvious from training knowledge.**
 Prior knowledge is unreliable for entity IDs and property sets. Skipping steps causes wrong IDs, wrong properties, and wrong results.
 
+### Step 0 — Search before querying (use `wikidata_search`)
+Before writing any SPARQL, resolve every unknown entity name and every property
+name to its Q/P number with the `wikidata_search` tool.
+Do **not** guess Q/P numbers from training knowledge — they are unreliable.
+
+```
+# Find the item for an entity
+wikidata_search(term="Marie Curie")              → Q7186
+
+# Find the property you need
+wikidata_search(term="date of birth", type="property")  → P569
+```
+
+`wikidata_search` → `sparql_query_wikidata` is the **standard opening move**
+for every Wikidata session. Run the search first, then build the SPARQL query
+using the confirmed IDs.
+
 ### Step 1 — Check existing queries
 Run `discover_sparql_queries`. Reuse or adapt any matching `.rq` file instead of writing from scratch.
 
@@ -182,6 +199,7 @@ LIMIT 10
 
 ## Tips
 
+- **Always call `wikidata_search` first** to resolve entity and property names to Q/P IDs before writing any SPARQL. Never assume a Q or P number.
 - Prefer `wdt:P<n>` (direct property) for simple facts; use `p:/ps:/pq:` only when you need qualifiers or ranks.
 - Always `FILTER(LANG(?label) = "en")` when using `rdfs:label` directly to avoid multi-language result explosion.
 - The `wikibase:label` service is faster and cleaner for label retrieval than joining on `rdfs:label`.

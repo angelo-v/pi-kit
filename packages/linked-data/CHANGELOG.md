@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- `wikidata_search` tool — resolves free-text entity or property names to Wikidata Q/P IDs via the MediaWiki `wbsearchentities` API. Eliminates the 1–3 SPARQL label-lookup round-trips previously needed before every query.
+
 ### Changed
 
 - `sparql-query-wikidata` skill: Replace the property-exploration pattern with a three-step workflow and domain specific references. Enforce reading the skill before using the query tool.
+- `sparql-query-wikidata` skill: Add Step 0 — "Search before querying" — establishing `wikidata_search` → `sparql_query_wikidata` as the standard opening move for every Wikidata session.
 
 ## 0.5.0
 
