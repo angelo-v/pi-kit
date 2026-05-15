@@ -5,12 +5,78 @@ description: Use this skill whenever the user asks about real-world facts that c
 
 # Wikidata SPARQL Skill
 
-## Workflow
+## ⚠️ Mandatory workflow — never skip or reorder steps
 
-1. **Check existing queries** — run `discover_sparql_queries`; reuse or adapt any match.
-2. **Write the query** — use `sparql_query_wikidata`. Standard prefixes are injected automatically; you do not need to declare `wd:`, `wdt:`, `wikibase:`, etc.
-3. **Explore before navigating** — if you don't know the entity/property IDs, search by label first, then use those IDs in the real query.
-4. **Present results faithfully** — only state what the data shows; mark anything else as interpretation.
+**Follow every step below for every query — even when the entity or its Q-number seems obvious from training knowledge.**
+Prior knowledge is unreliable for entity IDs and property sets. Skipping steps causes wrong IDs, wrong properties, and wrong results.
+
+### Step 1 — Check existing queries
+Run `discover_sparql_queries`. Reuse or adapt any matching `.rq` file instead of writing from scratch.
+
+### Step 2 — Resolve the entity ID from Wikidata (never assume a Q-number)
+Look up the entity by label — do not rely on memorised Q-numbers:
+
+```sparql
+SELECT ?item ?itemLabel WHERE {
+  ?item rdfs:label "München"@de .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "de,en". }
+}
+LIMIT 5
+```
+
+### Step 3 — Identify the entity type (P31)
+Fetch the type so you know which domain file to read:
+
+```sparql
+SELECT ?type ?typeLabel WHERE {
+  wd:Q1726 wdt:P31 ?type .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+```
+
+### Step 4 — Read the matching domain file (mandatory before writing the final query)
+Match the P31 result to the table below and **read that file now**.
+The domain file contains the correct property set and known pitfalls — do not guess.
+
+| Domain file | Typical P31 types |
+|-------------|-------------------|
+| `./domains/city.md` | city (Q515), big city (Q1549591), human settlement (Q486972) |
+| `./domains/person.md` | human (Q5) |
+| `./domains/organisation.md` | business (Q4830453), nonprofit (Q163740), government agency (Q327333) |
+| `./domains/creative-work.md` | film (Q11424), book (Q571), album (Q482994), TV series (Q5398426) |
+| `./domains/chemical-compound.md` | chemical compound (Q11173), drug (Q12140) |
+
+Load **only** the relevant domain file — do not load all of them.
+
+> **If no domain file matches**, run a namespace inventory to discover available properties:
+> ```sparql
+> SELECT ?prop (COUNT(?value) AS ?count) WHERE {
+>   wd:Q1726 ?prop ?value .
+> }
+> GROUP BY ?prop
+> ORDER BY DESC(?count)
+> LIMIT 30
+> ```
+
+### Step 5 — Write the domain-specific query
+Use the `VALUES` clause with the property set from the domain file. Do not select all predicates with an unbound `?prop ?value` pattern:
+
+```sparql
+SELECT ?propLabel ?valueLabel WHERE {
+  VALUES ?prop { wdt:P31 wdt:P17 wdt:P131 wdt:P1082 }  # taken from domain file
+  wd:Q1726 ?prop ?value .
+  SERVICE wikibase:label {
+    bd:serviceParam wikibase:language "en" .
+    ?prop  rdfs:label ?propLabel .
+    ?value rdfs:label ?valueLabel .
+  }
+}
+```
+
+### Step 6 — Present results faithfully
+Only state what the queried data shows. Mark anything else as *"interpretation — not modelled in Wikidata"*.
+
+---
 
 ## Key Wikidata concepts
 
@@ -40,13 +106,15 @@ xsd:      http://www.w3.org/2001/XMLSchema#
 bd:       http://www.bigdata.com/rdf#
 ```
 
-## Common patterns
+---
+
+## Common patterns (reference)
 
 ### Look up a known entity by label
 ```sparql
-SELECT ?item ?label WHERE {
+SELECT ?item ?itemLabel WHERE {
   ?item rdfs:label "Berlin"@en .
-  BIND("Berlin"@en AS ?label)
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 5
 ```
@@ -63,31 +131,17 @@ LIMIT 10
 
 ### All instances of a class (e.g. cities)
 ```sparql
-SELECT ?city ?label WHERE {
-  ?city wdt:P31 wd:Q515 ;       # instance of: city
-        rdfs:label ?label .
-  FILTER(LANG(?label) = "en")
+SELECT ?city ?cityLabel WHERE {
+  ?city wdt:P31 wd:Q515 .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20
-```
-
-### Properties of a specific entity (exploration)
-```sparql
-SELECT ?prop ?propLabel ?value ?valueLabel WHERE {
-  wd:Q64 ?prop ?value .           # Q64 = Berlin
-  SERVICE wikibase:label {
-    bd:serviceParam wikibase:language "en" .
-    ?prop  rdfs:label ?propLabel .
-    ?value rdfs:label ?valueLabel .
-  }
-}
-LIMIT 30
 ```
 
 ### Efficient label fetching with wikibase:label service
 ```sparql
 SELECT ?item ?itemLabel WHERE {
-  ?item wdt:P31 wd:Q515 .         # instance of: city
+  ?item wdt:P31 wd:Q515 .
   SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20
@@ -124,6 +178,8 @@ LIMIT 10
 
 > **⚠️ Never present inferences as Wikidata facts.** Every statement must be backed by a queried triple. Mark anything else as *"interpretation — not modelled in Wikidata"*.
 
+---
+
 ## Tips
 
 - Prefer `wdt:P<n>` (direct property) for simple facts; use `p:/ps:/pq:` only when you need qualifiers or ranks.
@@ -131,3 +187,4 @@ LIMIT 10
 - The `wikibase:label` service is faster and cleaner for label retrieval than joining on `rdfs:label`.
 - Wikidata is huge — always use `LIMIT` (automatically enforced by the tool if omitted).
 - If a query times out (Wikidata has a 60-second limit), narrow it with more specific `wdt:P31` values or add `LIMIT`.
+- **Never use `wdt:P131*` path traversal** to reach a parent region — it causes timeouts. Use `wdt:P17` for country instead.

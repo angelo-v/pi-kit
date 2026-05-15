@@ -18,21 +18,19 @@
  * dereference them as Linked Data documents.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { StringEnum } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
+import type {ExtensionAPI} from "@earendil-works/pi-coding-agent";
+import {isToolCallEventType} from "@earendil-works/pi-coding-agent";
+import {StringEnum} from "@earendil-works/pi-ai";
+import {Type} from "typebox";
 
-import { findBinary, REMOTE_BINARY_NAME } from "./lib/find-binary.js";
-import { buildArgs, type OutputFormat } from "./lib/format.js";
-import { ensureLimit } from "./lib/limit-query.js";
-import { runQuery } from "./lib/run-query.js";
-import {
-  WIKIDATA_ENDPOINT,
-  WIKIDATA_PREFIXES,
-  injectWikidataPrefixes,
-} from "./lib/wikidata.js";
-import { validateEndpointUrl } from "./lib/validate-endpoint.js";
-import { logQuery } from "./lib/query-logger.js";
+import {findBinary, REMOTE_BINARY_NAME} from "./lib/find-binary.js";
+import {buildArgs, type OutputFormat} from "./lib/format.js";
+import {ensureLimit} from "./lib/limit-query.js";
+import {runQuery} from "./lib/run-query.js";
+import {injectWikidataPrefixes, WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES,} from "./lib/wikidata.js";
+import {validateEndpointUrl} from "./lib/validate-endpoint.js";
+import {logQuery} from "./lib/query-logger.js";
+import {skillWasRead} from "./lib/skill-read-guard.js";
 
 // Re-export so consumers can import from a single place if needed.
 export { WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES, injectWikidataPrefixes, validateEndpointUrl };
@@ -74,6 +72,19 @@ async function queryEndpoint(
 // ── extension ─────────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
+  // ── skill-read guard ──────────────────────────────────────────────────────
+  // Block sparql_query_wikidata until the agent has read the SKILL.md.
+  // This turns the promptGuideline into a hard enforcement rather than a hint.
+  pi.on("tool_call", async (event, ctx) => {
+    if (!isToolCallEventType("sparql_query_wikidata", event)) return;
+    if (skillWasRead(ctx.sessionManager.getBranch())) return;
+    return {
+      block: true,
+      reason:
+        "You must read the sparql-query-wikidata skill file before calling sparql_query_wikidata",
+    };
+  });
+
   // ── sparql_query_endpoint ──────────────────────────────────────────────────
   pi.registerTool({
     name: "sparql_query_endpoint",
@@ -141,6 +152,7 @@ export default function (pi: ExtensionAPI) {
       "are injected automatically — you do not need to declare them.",
     promptGuidelines: [
       "Use sparql_query_wikidata whenever the user asks about real-world facts that could appear in Wikipedia — people, places, dates, organisations, species, works, geography, science, history, etc. Prefer live data over training knowledge.",
+      "Before calling sparql_query_wikidata for the first time in a session, read the sparql-query-wikidata skill.",
       "Standard Wikidata prefixes (wd:, wdt:, wikibase:, p:, ps:, pq:, rdfs:, schema:, skos:, owl:, xsd:, bd:) are injected automatically into sparql_query_wikidata queries.",
       "Reference Wikidata entities as wd:Q<number> and properties as wdt:P<number>.",
       "Use rdfs:label with FILTER(LANG(?label) = 'en') to retrieve English labels.",

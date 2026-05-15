@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.4.1
+## Unreleased
+
+### Changed
+
+- `sparql-query-wikidata` skill: Replace the property-exploration pattern with a three-step workflow and domain specific references. Enforce reading the skill before using the query tool.
+
+## 0.5.0
 
 ### Added
 - `ontology-design` skill — guides the agent through designing OWL ontologies and SKOS controlled vocabularies, covering classes, properties, individuals, concept schemes, and the practical interplay between OWL and SKOS.
