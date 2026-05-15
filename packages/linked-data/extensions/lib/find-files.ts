@@ -1,6 +1,6 @@
 /**
- * Recursive file-system walker that collects files matching a set of
- * extensions, skipping common non-project directories.
+ * Recursive file-system walker that collects files matching a predicate,
+ * skipping common non-project directories.
  */
 
 import { readdirSync, statSync } from "node:fs";
@@ -23,14 +23,17 @@ export const RDF_EXTENSIONS = new Set([
 /** SPARQL query-file extensions. */
 export const QUERY_EXTENSIONS = new Set([".rq", ".sparql"]);
 
+/** SHACL shapes files — matched by compound suffix to avoid catching plain .ttl data files. */
+export const SHACL_EXTENSIONS = new Set([".shacl.ttl"]);
+
 /**
- * Recursively walk `dir`, returning absolute paths of every file whose
- * extension is contained in `extensions`.
+ * Recursively walk `dir`, returning absolute paths of every file for which
+ * `matches(filename)` returns true.
  *
  * Directories listed in `IGNORE_DIRS` are skipped entirely.
  * Unreadable entries are silently skipped.
  */
-export function findByExtensions(dir: string, extensions: Set<string>): string[] {
+export function findFiles(dir: string, matches: (filename: string) => boolean): string[] {
   const results: string[] = [];
 
   function walk(current: string): void {
@@ -54,13 +57,31 @@ export function findByExtensions(dir: string, extensions: Set<string>): string[]
 
       if (stat.isDirectory()) {
         walk(full);
-      } else {
-        const ext = entry.slice(entry.lastIndexOf("."));
-        if (extensions.has(ext)) results.push(full);
+      } else if (matches(entry)) {
+        results.push(full);
       }
     }
   }
 
   walk(dir);
   return results;
+}
+
+/**
+ * Convenience wrapper: finds files whose last dot-segment extension is in `extensions`.
+ * e.g. `findByExtensions(dir, new Set([".ttl", ".n3"]))`.
+ */
+export function findByExtensions(dir: string, extensions: Set<string>): string[] {
+  return findFiles(dir, (name) => {
+    const ext = name.slice(name.lastIndexOf("."));
+    return extensions.has(ext);
+  });
+}
+
+/**
+ * Convenience wrapper: finds files whose full name ends with one of the given
+ * suffixes. Use for compound extensions like `.shacl.ttl`.
+ */
+export function findByFullSuffix(dir: string, suffixes: Set<string>): string[] {
+  return findFiles(dir, (name) => [...suffixes].some((s) => name.endsWith(s)));
 }
