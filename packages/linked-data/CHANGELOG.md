@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `discover_shapes_for_class` tool — queries local SHACL files with SPARQL to find all NodeShapes that target a given class IRI via `sh:targetClass`. Auto-discovers `*.shacl.ttl` files in the workspace when no shapes files are specified explicitly.
 - `rdf_validate` tool — validates one or more RDF/Turtle files against SHACL shapes files. Returns a conforms flag and a table of violations (focus node, path, message, severity). Auto-discovers `*.shacl.ttl` files in the workspace when no shapes are specified explicitly.
 - `rdf-validate` skill — guides the agent to run `rdf_validate` after writing RDF data, fix all violations, and never claim conformance without having actually validated.
 - `shacl_create_shape` tool — the LLM designs a SHACL NodeShape from context and writes it directly to a validated Turtle file.
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `rdf-write` skill now discovers mathing SHACL shapes and performs validation after writing 
 - `sparql-query-wikidata` skill: Replace the property-exploration pattern with a three-step workflow and domain specific references. Enforce reading the skill before using the query tool.
 - `sparql-query-wikidata` skill: Add Step 0 — "Search before querying" — establishing `wikidata_search` → `sparql_query_wikidata` as the standard opening move for every Wikidata session.
 

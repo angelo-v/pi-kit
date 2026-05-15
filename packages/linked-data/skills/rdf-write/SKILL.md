@@ -12,6 +12,10 @@ Use the `rdf_write` tool to write RDF data. Never use the `write` tool directly 
 1. Compose valid Turtle in your response
 2. Call `rdf_write` with the Turtle text and target path
 3. The tool validates, normalises, and writes the file — or returns a parse error with line info for you to fix
+4. After writing, discover which shapes apply to the data:
+   - For each type IRI, call `discover_shapes_for_class` to find the shapes that target it. The tool auto-discovers `*.shacl.ttl` files in the workspace when no shapes files are specified.
+   - Pass only the matching shapes files to `rdf_validate` (or omit `shapes` to auto-discover if no targeted match is found)
+5. If violations are found, fix the data and re-write the file, then repeat from step 4 until the file fully conforms
 
 ## Turtle Guidelines
 
