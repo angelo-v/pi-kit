@@ -1,0 +1,41 @@
+name: CI/CD Software Development
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/software-development/**"
+      - ".github/workflows/software-development-cicd.yml"
+
+jobs:
+  test-and-publish:
+    name: Test & Publish
+    runs-on: ubuntu-latest
+
+    # Required for npm trusted publishing (OIDC token)
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test --workspace=packages/software-development -- --run
+
+      - name: Publish to npm (trusted publishing)
+        uses: JS-DevTools/npm-publish@v4
+        with:
+          package: packages/software-development
+          provenance: true
+          access: public
