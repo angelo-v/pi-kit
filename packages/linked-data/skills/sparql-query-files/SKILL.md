@@ -5,23 +5,41 @@ description: Executes SPARQL 1.1 queries (SELECT, ASK, CONSTRUCT, DESCRIBE) agai
 
 # SPARQL Query Skill
 
-## Workflow
+## ⚠️ Mandatory workflow — never skip or reorder steps
 
-1. **Check existing queries** — run `discover_sparql_queries`; reuse or adapt any match.
-2. **Find files** — run `discover_rdf_files` if the user hasn't specified files.
-3. **Explore structure** — query classes/properties before navigating by type (see step 3 pattern below).
-4. **Query semantically** — traverse named individuals; use text `FILTER` only as a last resort.
+**Follow every step below for every query — even when the file paths or graph structure seem obvious.**
+
+### Step 1 — Check existing queries
+Run `discover_sparql_queries`. Reuse or adapt any matching SPARQL file instead of writing from scratch.
+
+### Step 2 — Discover RDF files (unless the user specified them)
+Run `discover_rdf_files` to find all available `.ttl`, `.rdf`, `.n3`, `.jsonld`, `.nt`, `.nq`, `.trig` files.
+Do **not** guess file paths — always discover first.
+
+### Step 3 — Explore graph structure
+Before writing a domain-specific query, run a discovery query to understand what classes and properties exist:
 
 ```sparql
--- Step 3: discover classes
+-- Discover all classes in the graph
 SELECT DISTINCT ?class WHERE { ?s a ?class } ORDER BY ?class
+
+-- Count instances by class
+SELECT ?class (COUNT(?s) AS ?count) WHERE {
+  ?s a ?class
+} GROUP BY ?class ORDER BY DESC(?count)
+
+-- Discover all properties
+SELECT DISTINCT ?prop WHERE { ?s ?prop ?o } ORDER BY ?prop
 ```
 
+### Step 4 — Query semantically
+Traverse named individuals; use text `FILTER` only as a last resort.
+
 ```sparql
--- ✅ Semantic traversal
+-- ✅ Semantic traversal (preferred)
 ?item a ex:SomeClass ; ex:relatedTo ex:SomeOtherEntity .
 
--- ❌ Avoid string matching in URIs
+-- ❌ Avoid string matching in URIs (last resort only)
 FILTER(CONTAINS(LCASE(STR(?s)), "keyword"))
 ```
 

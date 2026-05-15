@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `sparql-query-files` skill now follows a mandatory workflow (discover files → explore structure → query semantically), mirroring the Wikidata skill's approach
 - `rdf-write` skill now discovers mathing SHACL shapes and performs validation after writing 
 - `sparql-query-wikidata` skill: Replace the property-exploration pattern with a three-step workflow and domain specific references. Enforce reading the skill before using the query tool.
 - `sparql-query-wikidata` skill: Add Step 0 — "Search before querying" — establishing `wikidata_search` → `sparql_query_wikidata` as the standard opening move for every Wikidata session.
