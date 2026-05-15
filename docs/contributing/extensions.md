@@ -1,5 +1,7 @@
 # Developing Extensions
 
+This repo contains extensions and skills for Pi Coding Agent, [grouped by package](../../packages). Work in those directories.
+
 ## Extension authoring rules
 
 - **Thin entry-points** — extension files only register tools/events; no business logic.
