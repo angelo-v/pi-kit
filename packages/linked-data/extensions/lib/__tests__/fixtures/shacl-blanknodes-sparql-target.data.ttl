@@ -1,0 +1,6 @@
+@prefix schema: <https://schema.org/>.
+@prefix ex: <http://example.org/>.
+
+ex:act1 a schema:Action;
+    schema:name "Do something";
+    schema:actionStatus schema:CompletedActionStatus.

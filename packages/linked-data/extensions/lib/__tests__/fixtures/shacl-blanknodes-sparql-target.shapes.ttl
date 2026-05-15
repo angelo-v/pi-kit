@@ -1,0 +1,21 @@
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix schema: <https://schema.org/>.
+@prefix ex: <http://example.org/>.
+
+ex:ActionShape a sh:NodeShape.
+_:n3-0 a sh:SPARQLTarget;
+    sh:select "\n            PREFIX schema: <https://schema.org/>\n            SELECT ?this WHERE {\n                ?this a schema:Action .\n                FILTER NOT EXISTS { ?this a schema:Intangible . }\n            }\n        ".
+ex:ActionShape sh:target _:n3-0.
+_:n3-1 sh:path schema:name;
+    sh:minCount 1;
+    sh:message "name is required".
+ex:ActionShape sh:property _:n3-1.
+_:n3-2 sh:path schema:actionStatus;
+    sh:minCount 1.
+_:n3-3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> schema:CompletedActionStatus;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> _:n3-4.
+_:n3-4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> schema:ActiveActionStatus;
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
+_:n3-2 sh:in _:n3-3;
+    sh:message "status must be valid".
+ex:ActionShape sh:property _:n3-2.
