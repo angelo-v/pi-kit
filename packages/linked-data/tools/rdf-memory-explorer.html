@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RDF Memory Explorer</title>
+
+  <link rel="stylesheet" href="https://esm.sh/pollen-css@5/pollen.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/themes/default.css" />
+  <link rel="stylesheet" href="https://ka-f.webawesome.com/webawesome@3.7.0/styles/native.css" />
+  <script type="module" src="https://ka-f.webawesome.com/webawesome@3.7.0/webawesome.loader.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    .hidden { display: none !important; }
+
+    :root {
+      --color-bg:           var(--color-grey-100);
+      --color-surface:      var(--color-white);
+      --color-border:       var(--color-grey-200);
+      --color-text:         var(--color-grey-900);
+      --color-text-muted:   var(--color-grey-500);
+      --color-brand:        var(--color-violet-600);
+      --color-brand-light:  var(--color-violet-50);
+
+      --node-person:   #6366f1; --node-person-b:  #3730a3;
+      --node-org:      #0ea5e9; --node-org-b:     #0369a1;
+      --node-literal:  #10b981; --node-literal-b: #065f46;
+      --node-iri:      #f59e0b; --node-iri-b:     #b45309;
+      --node-graph:    #8b5cf6; --node-graph-b:   #5b21b6;
+      --node-blank:    #94a3b8; --node-blank-b:   #475569;
+      --node-selected: #f43f5e;
+      --edge-color:    #9ca3af;
+
+      --font-body:  var(--font-sans);
+      --text-sm:    var(--scale-00);
+      --text-base:  var(--scale-0);
+      --text-lg:    var(--scale-1);
+      --space-1: var(--size-1); --space-2: var(--size-2);
+      --space-3: var(--size-3); --space-4: var(--size-4);
+      --space-6: var(--size-6); --space-8: var(--size-8);
+      --radius: var(--radius-md);
+      --shadow: var(--shadow-xs);
+      --toolbar-h: 56px;
+      --panel-w:   300px;
+      --z-toolbar: var(--layer-3);
+
+      font-family: var(--font-body);
+      background:  var(--color-bg);
+      color:       var(--color-text);
+      line-height: 1.5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg:         var(--color-grey-950);
+        --color-surface:    var(--color-grey-900);
+        --color-border:     var(--color-grey-700);
+        --color-text:       var(--color-grey-50);
+        --color-text-muted: var(--color-grey-400);
+        --edge-color:       #4b5563;
+      }
+    }
+
+    /* ── Shell ── */
+    .shell {
+      display: grid;
+      grid-template-rows: var(--toolbar-h) 1fr;
+      grid-template-columns: 1fr var(--panel-w);
+      grid-template-areas: "toolbar toolbar" "canvas panel";
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      grid-area: toolbar;
+      z-index: var(--z-toolbar);
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 0 var(--space-4);
+      overflow-x: auto;
+    }
+
+    .app-name {
+      font-size: var(--text-lg);
+      font-weight: 700;
+      color: var(--color-brand);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-right: var(--space-2);
+    }
+
+    .toolbar-spacer { flex: 1; }
+
+    .legend {
+      display: flex;
+      gap: var(--space-4);
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .legend-dot  { width:11px; height:11px; border-radius:50%;  border:2px solid rgba(0,0,0,.18); flex-shrink:0; }
+    .legend-rect { width:11px; height:11px; border-radius:2px;  border:2px solid rgba(0,0,0,.18); flex-shrink:0; }
+
+    /* ── Toolbar wa-* controls: strip form-control padding so they sit flush ── */
+    .toolbar wa-select::part(form-control),
+    .toolbar wa-checkbox::part(base) {
+      display: contents;
+    }
+    .toolbar wa-select::part(form-control-label),
+    .toolbar wa-select::part(hint),
+    .toolbar wa-checkbox::part(hint) {
+      display: none;
+    }
+    .toolbar wa-select::part(form-control-input) {
+      width: 100%;
+    }
+    .toolbar wa-select {
+      flex-shrink: 0;
+      align-self: center;
+    }
+    .toolbar wa-checkbox {
+      flex-shrink: 0;
+      align-self: center;
+      font-size: var(--text-sm);
+    }
+    .toolbar wa-input::part(form-control-label),
+    .toolbar wa-input::part(hint) {
+      display: none;
+    }
+    .toolbar wa-input::part(form-control) {
+      display: contents;
+    }
+    .toolbar wa-input::part(form-control-input) {
+      width: 100%;
+    }
+    .toolbar wa-input {
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    /* ── Canvas ── */
+    .canvas-wrap {
+      grid-area: canvas;
+      position: relative;
+      overflow: hidden;
+      background: var(--color-bg);
+    }
+    #cy { width: 100%; height: 100%; }
+
+    .zoom-controls {
+      position: absolute;
+      bottom: var(--space-4);
+      left:   var(--space-4);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      z-index: var(--z-toolbar);
+    }
+
+    /* ── Pick overlay (shown before directory is chosen) ── */
+    .pick-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      background: var(--color-bg);
+      z-index: 200;
+    }
+    .pick-overlay.hidden { display: none; }
+    .pick-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-8);
+      max-width: 420px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-4);
+      box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,.08));
+    }
+    .pick-card wa-icon { font-size: 3rem; color: var(--color-brand); }
+    .pick-card h2 { font-size: var(--text-lg); font-weight: 700; }
+    .pick-card p  { font-size: var(--text-sm); color: var(--color-text-muted); }
+    .pick-path {
+      font-size: 12px;
+      font-family: var(--font-mono, monospace);
+      color: var(--color-text-muted);
+      background: var(--color-bg);
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius);
+      border: 1px solid var(--color-border);
+      text-align: left;
+      line-height: 1.7;
+      white-space: pre;
+    }
+
+    /* ── Loading overlay ── */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-4);
+      background: var(--color-bg);
+      z-index: 100;
+      font-size: var(--text-lg);
+      color: var(--color-text-muted);
+    }
+    .loading-overlay.hidden { display: none; }
+
+    /* ── Detail panel ── */
+    .detail-panel {
+      grid-area: panel;
+      background: var(--color-surface);
+      border-left: 1px solid var(--color-border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: var(--space-4);
+      border-bottom: 1px solid var(--color-border);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: var(--space-4); }
+
+    .detail-empty {
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+      text-align: center;
+      padding-top: var(--space-8);
+    }
+    .detail-prop { margin-bottom: var(--space-4); }
+    .prop-label {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .prop-value {
+      font-size: var(--text-sm);
+      color: var(--color-text);
+      word-break: break-all;
+      background: var(--color-bg);
+      padding: var(--space-2) var(--space-3);
+      border-radius: var(--radius);
+      border: 1px solid var(--color-border);
+      font-family: var(--font-mono, monospace);
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: var(--space-3);
+    }
+    .stats-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-2);
+      margin-bottom: var(--space-4);
+    }
+    .stat-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      text-align: center;
+    }
+    .stat-card .num { font-size: var(--text-lg); font-weight: 700; color: var(--color-brand); }
+    .stat-card .lbl { font-size: 11px; color: var(--color-text-muted); }
+
+    /* ── Panel tabs ── */
+    .panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+    .panel-tab {
+      flex: 1;
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .panel-tab:hover { color: var(--color-text); }
+    .panel-tab.active { color: var(--color-brand); border-bottom-color: var(--color-brand); }
+
+    /* ── Annotations block ── */
+    .annot-block {
+      background: var(--color-brand-light);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      margin-top: var(--space-3);
+    }
+    .annot-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--color-brand);
+      margin-bottom: var(--space-2);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .annot-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: var(--space-2);
+    }
+    .conf-high   { background: #d1fae5; color: #065f46; }
+    .conf-medium { background: #fef3c7; color: #92400e; }
+    .conf-low    { background: #fee2e2; color: #991b1b; }
+
+    /* ── Chunks tab ── */
+    .chunk-list { display: flex; flex-direction: column; gap: var(--space-3); }
+    .chunk-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .chunk-card:hover { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand-light); }
+    .chunk-card.active { border-color: var(--color-brand); background: var(--color-brand-light); }
+    .chunk-name {
+      font-size: var(--text-sm);
+      font-weight: 700;
+      color: var(--color-brand);
+      margin-bottom: var(--space-2);
+      word-break: break-all;
+      font-family: var(--font-mono, monospace);
+    }
+    .chunk-meta { font-size: 11px; color: var(--color-text-muted); margin-bottom: 2px; }
+    .chunk-meta strong { color: var(--color-text); }
+    .chunk-source {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      font-style: italic;
+      margin-top: var(--space-2);
+      word-break: break-all;
+    }
+    .chunk-quads-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--color-brand);
+      color: #fff;
+      margin-top: var(--space-2);
+    }
+    .annot-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-2); }
+    .annot-row {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-2) var(--space-3);
+      font-size: 11px;
+    }
+    .annot-row .triple-summary {
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      color: var(--color-text-muted);
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ── Toolbar ─────────────────────────────────────────────────── -->
+  <header class="toolbar">
+    <span class="app-name">
+      <wa-icon name="circle-nodes"></wa-icon>
+      RDF Memory Explorer
+    </span>
+
+    <wa-select id="store-select" size="small" style="width:200px" disabled>
+      <wa-option value="">— open directory —</wa-option>
+    </wa-select>
+
+    <wa-select id="layout-select" size="small" style="width:160px" value="cose">
+      <wa-option value="cose">Force-directed</wa-option>
+      <wa-option value="breadthfirst">Breadth-first</wa-option>
+      <wa-option value="circle">Circle</wa-option>
+      <wa-option value="concentric">Concentric</wa-option>
+      <wa-option value="grid">Grid</wa-option>
+    </wa-select>
+
+    <wa-checkbox id="show-literals" checked>Literals</wa-checkbox>
+    <wa-checkbox id="show-blanks">Blank nodes</wa-checkbox>
+    <wa-checkbox id="show-quoted" checked>Quoted triples</wa-checkbox>
+
+    <wa-input id="node-search" type="search" size="small" placeholder="Search nodes…" with-clear style="width:190px" autocomplete="off">
+      <wa-icon slot="start" name="magnifying-glass"></wa-icon>
+    </wa-input>
+
+    <wa-button size="small" variant="neutral" id="btn-fit">
+      <wa-icon slot="prefix" name="expand"></wa-icon>Fit
+    </wa-button>
+
+    <wa-button size="small" variant="neutral" id="btn-export">
+      <wa-icon slot="prefix" name="download"></wa-icon>PNG
+    </wa-button>
+
+    <wa-button size="small" variant="neutral" id="btn-refresh">
+      <wa-icon slot="prefix" name="arrows-rotate"></wa-icon>Refresh
+    </wa-button>
+
+
+    <span class="toolbar-spacer"></span>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot"  style="background:#6366f1"></div>Person</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#0ea5e9"></div>Org</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#10b981"></div>Literal</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#f59e0b"></div>IRI</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#94a3b8"></div>Blank</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#d946ef;border-style:dashed"></div>Quoted</div>
+      <div class="legend-item"><div class="legend-rect" style="background:#8b5cf6"></div>Graph</div>
+    </div>
+  </header>
+
+  <!-- ── Graph canvas ────────────────────────────────────────────── -->
+  <div class="canvas-wrap">
+    <div id="cy"></div>
+
+    <!-- Splash: shown only while auto-loading or when no stores are found -->
+    <div class="pick-overlay" id="pick-overlay">
+      <div class="pick-card">
+        <wa-icon name="circle-nodes"></wa-icon>
+        <h2 id="pick-title">Loading stores…</h2>
+        <p id="pick-desc">Reading <code>~/.pi/agent/rdf-memory</code></p>
+
+        <!-- "No stores" state (hidden until load fails) -->
+        <div id="pick-no-stores" class="hidden" style="width:100%;display:flex;flex-direction:column;gap:var(--space-3);align-items:center">
+          <p>No stores found in <code>~/.pi/agent/rdf-memory</code>.<br>Create a store with <code>rdf_memory_record</code> in pi, then click Refresh.</p>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Loading spinner -->
+    <div class="loading-overlay hidden" id="loading">
+      <wa-spinner style="font-size:2rem"></wa-spinner>
+      Parsing N-Quads…
+    </div>
+
+    <div class="zoom-controls">
+      <wa-button size="small" variant="neutral" id="btn-zoom-in"  title="Zoom in">
+        <wa-icon name="plus"></wa-icon>
+      </wa-button>
+      <wa-button size="small" variant="neutral" id="btn-zoom-out" title="Zoom out">
+        <wa-icon name="minus"></wa-icon>
+      </wa-button>
+    </div>
+  </div>
+
+  <!-- ── Detail panel ─────────────────────────────────────────────── -->
+  <aside class="detail-panel">
+    <div class="panel-tabs" role="tablist">
+      <button class="panel-tab active" id="tab-selection" role="tab" aria-selected="true">Selection</button>
+      <button class="panel-tab" id="tab-chunks" role="tab" aria-selected="false">Chunks</button>
+    </div>
+    <div class="panel-header" style="padding-top:var(--space-2);padding-bottom:var(--space-2)">
+      <span id="panel-label" style="font-size:11px">Click a node or edge</span>
+      <span id="panel-count" style="font-size:11px;font-weight:400"></span>
+    </div>
+    <div class="panel-body" id="panel-body-selection">
+      <graph-detail></graph-detail>
+    </div>
+    <div class="panel-body hidden" id="panel-body-chunks">
+      <chunk-list></chunk-list>
+    </div>
+  </aside>
+
+</div><!-- /.shell -->
+
+<script type="module">
+  import cytoscape from 'https://esm.sh/cytoscape@3';
+  import { Parser }  from 'https://esm.sh/n3@2';
+
+  // ── Globals ──────────────────────────────────────────────────────────
+  /** @type {Map<string, import('n3').Quad[]>} storeName → quads */
+  const storeQuads = new Map();
+  let currentStore = null;
+
+  /**
+   * Per-store annotation index.
+   * storeAnnotations.get(storeName) → Map<quotedKey, {confidence, source, tripleLabel}>
+   * quotedKey = "<s>|<p>|<o>" (raw term values)
+   */
+  const storeAnnotations = new Map();
+
+  /**
+   * Per-store chunk meta index.
+   * storeChunkMeta.get(storeName) → Map<graphIri, {recordedAt, source, topic, quadCount}>
+   */
+  const storeChunkMeta = new Map();
+
+  /**
+   * Per-store node→graphs index, built during renderStore.
+   * storeNodeGraphs.get(storeName) → Map<nodeId, Set<graphIri>>
+   */
+  const storeNodeGraphs = new Map();
+
+  // ── N-Quads parser ───────────────────────────────────────────────────
+
+  function parseNQuads(text) {
+    return new Promise((resolve, reject) => {
+      const parser = new Parser({ format: 'N-Quads' });
+      const quads  = [];
+      parser.parse(text, (err, quad) => {
+        if (err)  return reject(err);
+        if (quad) quads.push(quad);
+        else      resolve(quads);
+      });
+    });
+  }
+
+  // ── API-backed directory reader ───────────────────────────────────────
+  //
+  // When served by the pi extension the page has a read-only API scoped
+  // to ~/.pi/agent/rdf-memory (no arbitrary-path endpoints):
+  //   GET /api/stores          → { dir, stores: [name, …] }
+  //   GET /api/store/:name     → raw N-Quads
+  //
+  // Falls back to the File System Access API when the API is unavailable
+  // (e.g. the HTML is opened as a local file:// URL).
+
+  async function fetchStoreList() {
+    const r = await fetch('/api/stores');
+    if (!r.ok) throw new Error(`API error ${r.status}`);
+    return r.json(); // { dir, stores }
+  }
+
+  async function fetchStoreNq(name) {
+    const r = await fetch(`/api/store/${encodeURIComponent(name)}`);
+    if (!r.ok) throw new Error(`API error ${r.status} for store "${name}"`);
+    return r.text();
+  }
+
+  /** Load all stores from the server API (default dir only). */
+  async function loadFromApi() {
+    storeQuads.clear();
+    const { stores } = await fetchStoreList();
+    if (!stores.length) return { count: 0 };
+    await Promise.all(stores.map(async name => {
+      try {
+        const text  = await fetchStoreNq(name);
+        const quads = await parseNQuads(text);
+        storeQuads.set(name, quads);
+      } catch (e) {
+        console.error(`[RDF] store "${name}" failed:`, e);
+      }
+    }));
+    return { count: storeQuads.size };
+  }
+
+  /** Fallback: File System Access API (file:// or non-API server). */
+  async function readMemoryDir(dirHandle) {
+    storeQuads.clear();
+    const errors = [];
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind !== 'directory') continue;
+      try {
+        const fileHandle = await handle.getFileHandle('data.nq');
+        const file       = await fileHandle.getFile();
+        const text       = await file.text();
+        const quads      = await parseNQuads(text);
+        storeQuads.set(name, quads);
+      } catch (e) {
+        errors.push(`${name}: ${e.message}`);
+      }
+    }
+    return { storeQuads, errors };
+  }
+
+  // ── Populate store dropdown ───────────────────────────────────────────
+  function populateStoreSelect() {
+    const sel = document.getElementById('store-select');
+    sel.innerHTML = '';
+    // Rebuild annotation/chunk indexes
+    storeAnnotations.clear();
+    storeChunkMeta.clear();
+    storeNodeGraphs.clear();
+    for (const [name, quads] of storeQuads) {
+      const { annotations, chunkMeta } = buildIndexes(quads);
+      storeAnnotations.set(name, annotations);
+      storeChunkMeta.set(name, chunkMeta);
+    }
+    for (const name of [...storeQuads.keys()].sort()) {
+      const opt = document.createElement('wa-option');
+      opt.value       = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+    sel.disabled = false;
+    // pick first store
+    currentStore = [...storeQuads.keys()].sort()[0] ?? null;
+    // Defer value assignment until wa-select has processed its slotted wa-options
+    requestAnimationFrame(() => requestAnimationFrame(() => { sel.value = currentStore; }));
+  }
+
+  // ── Annotation & chunk indexer ─────────────────────────────────────
+  const MEM_REIFIES    = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies';
+  const MEM_CONFIDENCE = 'urn:pi-kit:linked-data:rdf-memory:confidence';
+  const MEM_SOURCE_P   = 'urn:pi-kit:linked-data:rdf-memory:source';
+  const MEM_RECORDED   = 'urn:pi-kit:linked-data:rdf-memory:recordedAt';
+  const DCT_SUBJECT    = 'http://purl.org/dc/terms/subject';
+  const MEM_META_G     = 'urn:pi-kit:linked-data:rdf-memory:meta';
+
+  function quotedKey(qt) {
+    return `${qt.subject.value}|${qt.predicate.value}|${qt.object.value}`;
+  }
+
+  /**
+   * Build annotation and chunk-meta indexes from a quad array.
+   * Returns { annotations: Map<key,{...}>, chunkMeta: Map<iri,{...}> }
+   */
+  function buildIndexes(quads) {
+    // Step 1: group quads by blank-node reifier subject
+    const reifierMap = new Map(); // blankId → { quotedKey?, confidence?, source? }
+    for (const q of quads) {
+      if (q.subject.termType !== 'BlankNode') continue;
+      const bk = q.subject.value;
+      if (!reifierMap.has(bk)) reifierMap.set(bk, {});
+      const rec = reifierMap.get(bk);
+      if (q.predicate.value === MEM_REIFIES && q.object.termType === 'Quad') {
+        rec.quotedKey = quotedKey(q.object);
+        rec.tripleLabel = `${shorten(q.object.subject.value)} · ${shorten(q.object.predicate.value)} · ${q.object.object.termType === 'Literal' ? `"${q.object.object.value}"` : shorten(q.object.object.value)}`;
+      }
+      if (q.predicate.value === MEM_CONFIDENCE) rec.confidence = q.object.value;
+      if (q.predicate.value === MEM_SOURCE_P)   rec.source     = q.object.value;
+    }
+
+    // Step 2: flatten into quotedKey → annotation
+    const annotations = new Map();
+    for (const rec of reifierMap.values()) {
+      if (!rec.quotedKey) continue;
+      annotations.set(rec.quotedKey, {
+        confidence:  rec.confidence ?? null,
+        source:      rec.source ?? null,
+        tripleLabel: rec.tripleLabel ?? rec.quotedKey,
+      });
+    }
+
+    // Step 3: meta graph chunk records
+    const chunkMeta = new Map();
+    const chunkQuadCounts = new Map();
+    for (const q of quads) {
+      const g = q.graph?.value;
+      if (!g || g === MEM_META_G) continue;
+      chunkQuadCounts.set(g, (chunkQuadCounts.get(g) ?? 0) + 1);
+    }
+    for (const q of quads) {
+      if (q.graph?.value !== MEM_META_G) continue;
+      const iri = q.subject.value;
+      if (!chunkMeta.has(iri)) chunkMeta.set(iri, { recordedAt: null, source: null, topic: null, quadCount: chunkQuadCounts.get(iri) ?? 0 });
+      const rec = chunkMeta.get(iri);
+      if (q.predicate.value === MEM_RECORDED)  rec.recordedAt = q.object.value;
+      if (q.predicate.value === MEM_SOURCE_P)  rec.source     = q.object.value;
+      if (q.predicate.value === DCT_SUBJECT)   rec.topic      = q.object.value;
+    }
+
+    return { annotations, chunkMeta };
+  }
+
+  // ── Prefix shortener ─────────────────────────────────────────────────
+  const KNOWN_PREFIXES = [
+    ['https://schema.org/',    'schema:'],
+    ['http://www.w3.org/1999/02/22-rdf-syntax-ns#', 'rdf:'],
+    ['http://www.w3.org/2000/01/rdf-schema#',        'rdfs:'],
+    ['http://www.w3.org/2002/07/owl#',               'owl:'],
+    ['http://purl.org/dc/terms/',                    'dct:'],
+    ['https://www.w3.org/ns/solid/terms#',           'solid:'],
+    ['http://xmlns.com/foaf/0.1/',                   'foaf:'],
+    ['urn:pi-kit:linked-data:rdf-memory:',           'mem:'],
+    ['http://www.w3.org/ns/prov#',                   'prov:'],
+    ['https://w3id.org/security#',                   'sec:'],
+  ];
+
+  function shorten(iri) {
+    for (const [ns, prefix] of KNOWN_PREFIXES) {
+      if (iri.startsWith(ns)) return prefix + iri.slice(ns.length);
+    }
+    const m = iri.match(/[#/]([^#/]+)$/);
+    return m ? m[1] : iri;
+  }
+
+  // ── Term helpers ─────────────────────────────────────────────────────
+  const MEM = 'urn:pi-kit:linked-data:rdf-memory:';
+  const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+  const SCHEMA   = 'https://schema.org/';
+
+  const TYPE_GROUP = {
+    [`${SCHEMA}Person`]:       'person',
+    [`${SCHEMA}Organization`]: 'org',
+    [`${SCHEMA}Product`]:      'product',
+    [`${SCHEMA}Event`]:        'event',
+    [`${SCHEMA}Place`]:        'place',
+  };
+
+  // Suppress internal mem: annotation predicates from the visual graph
+  const SUPPRESS_PREDICATES = new Set([
+    `${MEM}confidence`,
+    `${MEM}source`,
+    `${MEM}recordedAt`,
+    `http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies`,
+  ]);
+
+  // Meta graph IRI — don't render its triples as data edges
+  const META_GRAPH = `${MEM}meta`;
+
+  // ── Build Cytoscape elements from N3 quads ───────────────────────────
+  function buildElements(quads, opts = {}) {
+    const { showLiterals = true, showBlanks = false, showQuoted = true } = opts;
+
+    // First pass: collect rdf:type assertions for subject → group mapping
+    const typeMap = {};
+    for (const q of quads) {
+      if (q.predicate.value === RDF_TYPE && q.object.termType === 'NamedNode') {
+        typeMap[q.subject.value] = q.object.value;
+      }
+    }
+
+    const nodes     = new Map();  // nodeId → data
+    const edges     = [];
+    const graphIds  = new Set();
+    const nodeGraphs = new Map(); // nodeId → Set<graphIri>
+    let   edgeIdx   = 0;
+
+    function groupForSubject(iri) {
+      const t = typeMap[iri];
+      return t ? (TYPE_GROUP[t] ?? 'iri') : 'iri';
+    }
+
+    function termId(term) {
+      if (term.termType === 'BlankNode')  return `_blank_${term.value}`;
+      if (term.termType === 'Literal')    return `_lit_${term.value}`;
+      if (term.termType === 'Quad')       return `_quoted_${term.subject.value}|${term.predicate.value}|${term.object.value}`;
+      return `_iri_${term.value}`;
+    }
+
+    function quotedLabel(qt) {
+      const s = shorten(qt.subject.value);
+      const p = shorten(qt.predicate.value);
+      const raw = qt.object.value;
+      const o = qt.object.termType === 'Literal'
+        ? `"${raw.length > 16 ? raw.slice(0,14)+'…' : raw}"`
+        : shorten(raw);
+      return `<<\n${s}\n${p}\n${o}\n>>`;
+    }
+
+    function ensureNode(term) {
+      const id = termId(term);
+      if (nodes.has(id)) return id;
+
+      if (term.termType === 'BlankNode') {
+        nodes.set(id, { id, label: `_:${term.value.slice(0,8)}`, nodeType: 'blank', group: 'blank', fullVal: term.value });
+      } else if (term.termType === 'Literal') {
+        const raw = term.value;
+        nodes.set(id, { id, label: raw.length > 30 ? raw.slice(0,28)+'…' : raw, fullVal: raw, datatype: term.datatype?.value, nodeType: 'literal', group: 'literal' });
+      } else if (term.termType === 'Quad') {
+        // RDF-star quoted triple — shown as a fuchsia dashed node
+        nodes.set(id, {
+          id, label: quotedLabel(term), nodeType: 'quoted', group: 'quoted',
+          quotedS: term.subject.value,
+          quotedP: term.predicate.value,
+          quotedO: term.object.value,
+        });
+      } else {
+        const iri = term.value;
+        nodes.set(id, { id, label: shorten(iri), fullIri: iri, nodeType: 'iri', group: groupForSubject(iri) });
+      }
+      return id;
+    }
+
+    function ensureGraphNode(graphIri) {
+      const id = `_graph_${graphIri}`;
+      if (!graphIds.has(id)) {
+        graphIds.add(id);
+        nodes.set(id, {
+          id, label: shorten(graphIri), fullIri: graphIri,
+          nodeType: 'graph', group: 'graph',
+        });
+      }
+      return id;
+    }
+
+    for (const q of quads) {
+      const gIri = q.graph?.value;
+
+      // Skip the meta graph's bookkeeping triples from visual rendering
+      if (gIri === META_GRAPH) continue;
+
+      // Skip mem: annotation predicates (RDF-star reification noise)
+      if (SUPPRESS_PREDICATES.has(q.predicate.value)) continue;
+
+      // Skip blank nodes if toggled off
+      if (!showBlanks && (q.subject.termType === 'BlankNode' || q.object.termType === 'BlankNode')) continue;
+
+      // Skip quoted triples (RDF-star) if toggled off
+      if (!showQuoted && (q.subject.termType === 'Quad' || q.object.termType === 'Quad')) continue;
+
+      // Skip literals if toggled off
+      if (!showLiterals && q.object.termType === 'Literal') continue;
+
+      const sId = ensureNode(q.subject);
+      const oId = ensureNode(q.object);
+
+      if (gIri) {
+        ensureGraphNode(gIri);
+        if (!nodeGraphs.has(sId)) nodeGraphs.set(sId, new Set());
+        if (!nodeGraphs.has(oId)) nodeGraphs.set(oId, new Set());
+        nodeGraphs.get(sId).add(gIri);
+        nodeGraphs.get(oId).add(gIri);
+      }
+
+      edges.push({ data: {
+        id:     `e${edgeIdx++}`,
+        source: sId,
+        target: oId,
+        label:  shorten(q.predicate.value),
+        fullP:  q.predicate.value,
+        graph:  gIri ?? '',
+      }});
+    }
+
+    return {
+      elements: [
+        ...[...nodes.values()].map(d => ({ data: d })),
+        ...edges,
+      ],
+      nodeGraphs,
+    };
+  }
+
+  // ── Cytoscape setup ──────────────────────────────────────────────────
+  const ROOT  = getComputedStyle(document.documentElement);
+  const v     = n => ROOT.getPropertyValue(n).trim();
+
+  const CY_STYLE = [
+    {
+      selector: 'node',
+      style: {
+        'background-color': v('--node-iri'),
+        'border-color':     v('--node-iri-b'),
+        'border-width': 2,
+        'color': '#fff',
+        'label': 'data(label)',
+        'text-valign': 'center',
+        'text-halign': 'center',
+        'font-size': 11,
+        'font-family': 'system-ui, sans-serif',
+        'font-weight': 600,
+        'padding': 8,
+        'width': 'label',
+        'height': 30,
+        'shape': 'round-rectangle',
+        'text-wrap': 'wrap',
+        'text-max-width': 130,
+      }
+    },
+    { selector: 'node[group="person"]',  style: { 'background-color': v('--node-person'),  'border-color': v('--node-person-b'),  'height': 40, 'font-size': 13 } },
+    { selector: 'node[group="org"]',     style: { 'background-color': v('--node-org'),     'border-color': v('--node-org-b'),     'shape': 'ellipse', 'height': 36 } },
+    { selector: 'node[group="literal"]', style: { 'background-color': v('--node-literal'), 'border-color': v('--node-literal-b'), 'border-style': 'dashed', 'font-size': 10, 'height': 26 } },
+    { selector: 'node[group="blank"]',   style: { 'background-color': v('--node-blank'),   'border-color': v('--node-blank-b'),   'shape': 'diamond', 'height': 30 } },
+    { selector: 'node[group="quoted"]',  style: { 'background-color': '#d946ef', 'border-color': '#86198f', 'border-style': 'dashed', 'border-width': 2, 'shape': 'round-rectangle', 'font-size': 9, 'color': '#fff', 'text-wrap': 'wrap', 'text-max-width': 110, 'width': 'label', 'height': 'label', 'padding': 8 } },
+    { selector: 'node[group="graph"]',   style: { 'background-color': v('--node-graph'),   'border-color': v('--node-graph-b'),   'shape': 'rectangle', 'height': 38, 'font-size': 12, 'font-weight': 700 } },
+    { selector: 'node:selected',         style: { 'background-color': v('--node-selected'), 'border-color': '#9f1239', 'color': '#fff' } },
+    { selector: 'node:active',           style: { 'overlay-opacity': 0.08 } },
+    {
+      selector: 'edge',
+      style: {
+        'width': 1.5,
+        'line-color': v('--edge-color'),
+        'target-arrow-color': v('--edge-color'),
+        'target-arrow-shape': 'triangle',
+        'curve-style': 'bezier',
+        'label': 'data(label)',
+        'font-size': 9,
+        'color': '#6b7280',
+        'text-background-color': '#ffffff',
+        'text-background-opacity': 0.8,
+        'text-background-padding': '2px',
+      }
+    },
+    { selector: 'edge:selected', style: { 'line-color': v('--node-selected'), 'target-arrow-color': v('--node-selected') } },
+
+    // search dim / highlight
+    { selector: '.search-dim',       style: { opacity: 0.12 } },
+    { selector: '.search-match',     style: { 'border-width': 3, 'border-color': '#f59e0b', 'border-opacity': 1 } },
+    { selector: 'edge.search-match', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 2.5 } },
+  ];
+
+  const cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements:  [],
+    style:     CY_STYLE,
+    layout:    { name: 'grid' },
+    wheelSensitivity: 0.3,
+  });
+
+  // ── Render helpers ───────────────────────────────────────────────────
+  function getLayoutName() {
+    return document.getElementById('layout-select').value || 'cose';
+  }
+
+  function getOpts() {
+    return {
+      showLiterals: document.getElementById('show-literals').checked,
+      showBlanks:   document.getElementById('show-blanks').checked,
+      showQuoted:   document.getElementById('show-quoted').checked,
+    };
+  }
+
+  function renderStore() {
+    if (!currentStore) return;
+    document.getElementById('loading').classList.remove('hidden');
+
+    const quads    = storeQuads.get(currentStore) ?? [];
+    const { elements, nodeGraphs } = buildElements(quads, getOpts());
+    storeNodeGraphs.set(currentStore, nodeGraphs);
+
+    cy.elements().remove();
+    cy.add(elements);
+    cy.layout({
+      name: getLayoutName(),
+      padding: 60,
+      animate: false,
+      nodeRepulsion: 8000,
+      idealEdgeLength: 80,
+      edgeElasticity: 0.45,
+      gravity: 0.25,
+    }).run();
+
+    updateStats();
+    document.getElementById('loading').classList.add('hidden');
+    detail.clear();
+    document.querySelector('chunk-list').refresh();
+    // re-apply any active search after graph is rebuilt
+    const searchEl = document.getElementById('node-search');
+    if (searchEl) applySearch(searchEl.value ?? '');
+  }
+
+  // ── Node search ──────────────────────────────────────────────────────
+  let _searchTimer = null;
+
+  function applySearch(raw) {
+    const term = raw.trim().toLowerCase();
+    cy.elements().removeClass('search-dim search-match');
+    if (!term) return;
+
+    // Match against node label + fullVal + fullIri; edge label + fullP
+    const matchNodes = cy.nodes().filter(n => {
+      const d = n.data();
+      return [d.label, d.fullVal, d.fullIri].some(v => v && v.toLowerCase().includes(term));
+    });
+    const matchEdges = cy.edges().filter(e => {
+      const d = e.data();
+      return [d.label, d.fullP].some(v => v && v.toLowerCase().includes(term));
+    });
+
+    if (matchNodes.length === 0 && matchEdges.length === 0) {
+      // nothing matched — dim everything
+      cy.elements().addClass('search-dim');
+      return;
+    }
+
+    // Neighbourhood to keep bright: matched nodes + their direct edges + edge endpoints
+    const neighbourhood = matchNodes.union(matchEdges)
+      .union(matchNodes.connectedEdges())
+      .union(matchEdges.connectedNodes());
+
+    cy.elements().not(neighbourhood).addClass('search-dim');
+    matchNodes.addClass('search-match');
+    matchEdges.addClass('search-match');
+  }
+
+  function scheduleSearch(val) {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => applySearch(val), 180);
+  }
+
+  function updateStats() {
+    const n = cy.nodes().length;
+    const e = cy.edges().length;
+    document.getElementById('panel-count').textContent = `${n} nodes · ${e} edges`;
+  }
+
+  // ── Provenance helpers ────────────────────────────────────────────────
+  function currentAnnotations() { return storeAnnotations.get(currentStore) ?? new Map(); }
+  function currentChunkMeta()   { return storeChunkMeta.get(currentStore)   ?? new Map(); }
+  function currentNodeGraphs()  { return storeNodeGraphs.get(currentStore)  ?? new Map(); }
+
+  /** Chunk meta objects for a node (via nodeGraphs index). */
+  function chunksForNode(nodeId) {
+    const graphIris = currentNodeGraphs().get(nodeId) ?? new Set();
+    const meta = currentChunkMeta();
+    return [...graphIris]
+      .map(iri => ({ iri, ...(meta.get(iri) ?? {}) }))
+      .filter(c => c.recordedAt || c.source);
+  }
+
+  /** RDF-star annotation for a quoted-triple node. */
+  function annotationForQuoted(d) {
+    const key = `${d.quotedS}|${d.quotedP}|${d.quotedO}`;
+    return currentAnnotations().get(key) ?? null;
+  }
+
+  /** RDF-star annotation for an edge (exact triple match). */
+  function annotationForEdge(d) {
+    const src = cy.getElementById(d.source).data();
+    const tgt = cy.getElementById(d.target).data();
+    const key = `${src.fullIri || src.fullVal || ''}|${d.fullP}|${tgt.fullIri || tgt.fullVal || ''}`;
+    return currentAnnotations().get(key) ?? null;
+  }
+
+  function renderChunkBlock(chunks) {
+    if (!chunks.length) return '';
+    return chunks.map(c => {
+      const date  = c.recordedAt ? new Date(c.recordedAt).toLocaleString() : null;
+      return `<div class="annot-block">
+        <div class="annot-title"><wa-icon name="box-archive" style="font-size:12px"></wa-icon>${escHtml(shorten(c.iri))}</div>
+        ${c.topic  ? `<div class="prop-label">Topic</div><div class="prop-value">${escHtml(c.topic)}</div>` : ''}
+        ${date     ? `<div class="prop-label" style="margin-top:var(--space-2)">Recorded</div><div class="prop-value">${date}</div>` : ''}
+        ${c.source ? `<div class="prop-label" style="margin-top:var(--space-2)">Chunk source</div><div class="prop-value">${escHtml(c.source)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function renderAnnotRow(annot) {
+    if (!annot) return '';
+    const confCls   = annot.confidence === 'high' ? 'conf-high' : annot.confidence === 'low' ? 'conf-low' : 'conf-medium';
+    const confBadge = annot.confidence
+      ? `<span class="annot-pill ${confCls}"><wa-icon name="shield-check" style="font-size:11px"></wa-icon>${annot.confidence} confidence</span>` : '';
+    const srcLine   = annot.source
+      ? `<div class="prop-label" style="margin-top:var(--space-2)">Triple source</div><div class="prop-value">${escHtml(annot.source)}</div>` : '';
+    return `<div class="annot-block">
+      <div class="annot-title"><wa-icon name="star" style="font-size:12px"></wa-icon>RDF-star annotation</div>
+      ${confBadge}${srcLine}
+    </div>`;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── <graph-detail> custom element ────────────────────────────────────
+  class GraphDetail extends HTMLElement {
+    #el = null;
+    connectedCallback() { this.#render(); }
+    show(el) { this.#el = el; this.#render(); }
+    clear()  { this.#el = null; this.#render(); }
+
+    #typeColor(g) {
+      return { person:'#6366f1', org:'#0ea5e9', literal:'#10b981',
+               iri:'#f59e0b', graph:'#8b5cf6', blank:'#94a3b8', quoted:'#d946ef' }[g] ?? '#64748b';
+    }
+
+    #prop(label, value) {
+      return `<div class="detail-prop">
+        <div class="prop-label">${label}</div>
+        <div class="prop-value">${value ?? '—'}</div>
+      </div>`;
+    }
+
+    #render() {
+      if (!this.#el) {
+        if (!currentStore) {
+          this.innerHTML = `<p class="detail-empty">Open a directory to begin.</p>`;
+          return;
+        }
+        const quads  = storeQuads.get(currentStore) ?? [];
+        const graphs  = new Set(quads.map(q => q.graph?.value).filter(Boolean)).size;
+        const nodes  = cy.nodes().length;
+        const edges  = cy.edges().length;
+        this.innerHTML = `
+          <div class="stats-bar">
+            <div class="stat-card"><div class="num">${nodes}</div><div class="lbl">Nodes</div></div>
+            <div class="stat-card"><div class="num">${edges}</div><div class="lbl">Edges</div></div>
+            <div class="stat-card"><div class="num">${quads.length}</div><div class="lbl">Quads</div></div>
+            <div class="stat-card"><div class="num">${graphs}</div><div class="lbl">Graphs</div></div>
+          </div>
+          <p class="detail-empty">Click a node or edge to inspect it.</p>`;
+        return;
+      }
+
+      const d      = this.#el.data();
+      const isEdge = this.#el.isEdge();
+      const color  = this.#typeColor(d.group);
+      const TYPE_LABELS = { person:'Person', org:'Organisation', literal:'Literal',
+                            iri:'IRI', graph:'Named Graph', blank:'Blank Node', quoted:'Quoted Triple (RDF-star)' };
+
+      if (isEdge) {
+        const annot  = annotationForEdge(d);
+        const chunks = chunksForNode(d.source);
+        this.innerHTML = `
+          <span class="badge" style="background:#6b7280">Edge / Predicate</span>
+          ${this.#prop('Predicate', shorten(d.fullP || d.label))}
+          ${this.#prop('Full IRI', d.fullP || '—')}
+          ${this.#prop('Source node', d.source)}
+          ${this.#prop('Target node', d.target)}
+          ${renderAnnotRow(annot)}
+          ${renderChunkBlock(chunks)}`;
+      } else {
+        const deg    = this.#el.connectedEdges().length;
+        const out    = this.#el.connectedEdges(`[source = "${d.id}"]`).length;
+        const ins    = this.#el.connectedEdges(`[target = "${d.id}"]`).length;
+        const chunks = chunksForNode(d.id);
+        const annot  = d.nodeType === 'quoted' ? annotationForQuoted(d) : null;
+        this.innerHTML = `
+          <span class="badge" style="background:${color}">${TYPE_LABELS[d.group] ?? d.group}</span>
+          ${this.#prop('Label',     d.label)}
+          ${this.#prop('Full value', d.fullIri || d.fullVal || '—')}
+          ${d.datatype ? this.#prop('Datatype', shorten(d.datatype)) : ''}
+          ${d.quotedS  ? this.#prop('Quoted subject',   shorten(d.quotedS)) : ''}
+          ${d.quotedP  ? this.#prop('Quoted predicate', shorten(d.quotedP)) : ''}
+          ${d.quotedO  ? this.#prop('Quoted object',    d.quotedO) : ''}
+          ${this.#prop('Degree', `${deg}  (↑${out} out  ↓${ins} in)`)}
+          ${renderAnnotRow(annot)}
+          ${renderChunkBlock(chunks)}`;
+      }
+    }
+  }
+  customElements.define('graph-detail', GraphDetail);
+
+  // ── <chunk-list> custom element ───────────────────────────────────────
+  class ChunkList extends HTMLElement {
+    connectedCallback() { this.refresh(); }
+    refresh() { this.#render(); }
+
+    #render() {
+      const meta = storeChunkMeta.get(currentStore);
+      if (!meta || meta.size === 0) {
+        this.innerHTML = `<p class="detail-empty">No chunk metadata found.<br>Select a store to begin.</p>`;
+        return;
+      }
+
+      const annotations = storeAnnotations.get(currentStore) ?? new Map();
+
+      // Build a map: graphIri → list of annotations in that graph
+      const graphAnnots = new Map();
+      const quads = storeQuads.get(currentStore) ?? [];
+      for (const q of quads) {
+        const g = q.graph?.value;
+        if (!g || g === MEM_META_G) continue;
+        if (q.subject.termType !== 'BlankNode') continue;
+        if (q.predicate.value !== MEM_CONFIDENCE && q.predicate.value !== MEM_SOURCE_P && q.predicate.value !== MEM_REIFIES) continue;
+        if (!graphAnnots.has(g)) graphAnnots.set(g, new Set());
+        if (q.predicate.value === MEM_REIFIES && q.object.termType === 'Quad') {
+          graphAnnots.get(g).add(quotedKey(q.object));
+        }
+      }
+
+      let html = '<div class="chunk-list">';
+      for (const [iri, info] of [...meta.entries()].sort((a,b) => {
+        const ta = a[1].recordedAt ?? '';
+        const tb = b[1].recordedAt ?? '';
+        return tb.localeCompare(ta);
+      })) {
+        const shortIri = shorten(iri);
+        const date = info.recordedAt ? new Date(info.recordedAt).toLocaleString() : '—';
+        const topic = info.topic ? `<div class="chunk-meta"><strong>Topic:</strong> ${escHtml(info.topic)}</div>` : '';
+        const src   = info.source ? `<div class="chunk-source">${escHtml(info.source)}</div>` : '';
+        const quadBadge = `<span class="chunk-quads-badge">${info.quadCount} quads</span>`;
+
+        // Annotations in this graph
+        const annotKeys = graphAnnots.get(iri) ?? new Set();
+        let annotSection = '';
+        if (annotKeys.size > 0) {
+          const rows = [...annotKeys].map(key => {
+            const a = annotations.get(key);
+            if (!a) return '';
+            const confCls = a.confidence === 'high' ? 'conf-high' : a.confidence === 'low' ? 'conf-low' : 'conf-medium';
+            const confBadge = a.confidence
+              ? `<span class="annot-pill ${confCls}" style="font-size:10px;padding:1px 6px">${a.confidence}</span>` : '';
+            return `<div class="annot-row">
+              <div class="triple-summary">&lt;&lt; ${escHtml(a.tripleLabel)} &gt;&gt;</div>
+              ${confBadge}
+              ${a.source ? `<div style="color:var(--color-text-muted);font-size:10px;margin-top:2px">${escHtml(a.source)}</div>` : ''}
+            </div>`;
+          }).filter(Boolean).join('');
+          if (rows) {
+            annotSection = `<div class="annot-block" style="margin-top:var(--space-2)">
+              <div class="annot-title" style="font-size:10px"><wa-icon name="star" style="font-size:10px"></wa-icon>RDF-star annotations (${annotKeys.size})</div>
+              <div class="annot-list">${rows}</div>
+            </div>`;
+          }
+        }
+
+        html += `<div class="chunk-card" data-iri="${escHtml(iri)}">
+          <div class="chunk-name">${escHtml(shortIri)}</div>
+          <div class="chunk-meta"><strong>Recorded:</strong> ${date}</div>
+          ${topic}
+          ${src}
+          ${quadBadge}
+          ${annotSection}
+        </div>`;
+      }
+      html += '</div>';
+      this.innerHTML = html;
+    }
+  }
+  customElements.define('chunk-list', ChunkList);
+
+  const detail = document.querySelector('graph-detail');
+  cy.on('select',   'node, edge', e  => {
+    detail.show(e.target);
+    switchTab('selection');
+  });
+  cy.on('unselect', 'node, edge', () => detail.clear());
+
+  // ── Panel tab switching ─────────────────────────────────────────────
+  function switchTab(tab) {
+    const isSel = tab === 'selection';
+    document.getElementById('tab-selection').classList.toggle('active', isSel);
+    document.getElementById('tab-chunks').classList.toggle('active', !isSel);
+    document.getElementById('panel-body-selection').classList.toggle('hidden', !isSel);
+    document.getElementById('panel-body-chunks').classList.toggle('hidden', isSel);
+    document.getElementById('panel-label').textContent = isSel ? 'Click a node or edge' : 'Named graph chunks';
+  }
+
+  document.getElementById('tab-selection').addEventListener('click', () => switchTab('selection'));
+  document.getElementById('tab-chunks').addEventListener('click',    () => {
+    switchTab('chunks');
+    document.querySelector('chunk-list').refresh();
+  });
+
+
+  // ── Store picker ─────────────────────────────────────────────────────
+  document.getElementById('store-select').addEventListener('change', e => {
+    currentStore = e.target.value;
+    renderStore();
+  });
+
+  // ── Load helpers ──────────────────────────────────────────────────────
+
+  function showOverlay(title, desc) {
+    document.getElementById('pick-title').textContent = title;
+    document.getElementById('pick-desc').innerHTML    = desc;
+    document.getElementById('pick-no-stores').classList.add('hidden');
+    document.getElementById('pick-overlay').classList.remove('hidden');
+  }
+
+  function showNoStores() {
+    document.getElementById('pick-title').textContent = 'No stores found';
+    document.getElementById('pick-desc').innerHTML =
+      'No stores were found in <code>~/.pi/agent/rdf-memory</code>.<br>' +
+      'Create one with <code>rdf_memory_record</code> in pi, then click Refresh.';
+    document.getElementById('pick-no-stores').classList.remove('hidden');
+    document.getElementById('pick-overlay').classList.remove('hidden');
+  }
+
+  function hideOverlay() {
+    document.getElementById('pick-overlay').classList.add('hidden');
+  }
+
+  /**
+   * Primary load path: fetch stores from the server API.
+   * Falls back to a file-picker if the API is unavailable (e.g. file:// URL).
+   */
+  async function loadStores() {
+    showOverlay('Loading stores…', 'Reading <code>~/.pi/agent/rdf-memory</code>');
+    document.getElementById('loading').classList.remove('hidden');
+
+    try {
+      const { count } = await loadFromApi();
+      document.getElementById('loading').classList.add('hidden');
+
+      if (count === 0) { showNoStores(); return; }
+
+      hideOverlay();
+      populateStoreSelect();
+      renderStore();
+    } catch (err) {
+      console.warn('[RDF] API unavailable, falling back to File System Access API:', err);
+      document.getElementById('loading').classList.add('hidden');
+      showOverlay(
+        'Choose directory',
+        'The server API is unavailable. Use the button below to pick the RDF memory directory.'
+      );
+      const btn = document.createElement('wa-button');
+      btn.setAttribute('appearance', 'filled');
+      btn.setAttribute('variant', 'brand');
+      btn.innerHTML = '<wa-icon slot="prefix" name="folder-open"></wa-icon>Choose directory…';
+      btn.addEventListener('click', openDirectoryFallback);
+      const noStores = document.getElementById('pick-no-stores');
+      noStores.replaceChildren(btn);
+      noStores.classList.remove('hidden');
+    }
+  }
+
+  /** Fallback: File System Access API picker (used only when API is unreachable). */
+  async function openDirectoryFallback() {
+    let dirHandle;
+    try { dirHandle = await window.showDirectoryPicker({ mode: 'read' }); }
+    catch (e) { if (e.name !== 'AbortError') console.error(e); return; }
+
+    document.getElementById('loading').classList.remove('hidden');
+    const { errors } = await readMemoryDir(dirHandle);
+    document.getElementById('loading').classList.add('hidden');
+
+    if (storeQuads.size === 0) {
+      alert(['No stores loaded in "' + dirHandle.name + '".',
+             errors.length ? 'Errors:\n' + errors.map(e => '  • ' + e).join('\n') :
+             'No subdirectories with data.nq were found.'].join('\n'));
+      return;
+    }
+    hideOverlay();
+    populateStoreSelect();
+    renderStore();
+  }
+
+  // ── Refresh button ────────────────────────────────────────────────────
+  document.getElementById('btn-refresh').addEventListener('click', () => loadStores());
+
+  // ── Auto-load on startup ──────────────────────────────────────────────
+  loadStores();
+
+
+  // ── Layout picker ─────────────────────────────────────────────────────
+  document.getElementById('layout-select').addEventListener('change', e => {
+    const name = e.target.value || 'cose';
+    cy.layout({ name, padding: 60, animate: true }).run();
+  });
+
+  // ── Toggles ───────────────────────────────────────────────────────────
+  document.getElementById('show-literals').addEventListener('change', renderStore);
+  document.getElementById('show-blanks').addEventListener('change',   renderStore);
+  document.getElementById('show-quoted').addEventListener('change',   renderStore);
+
+  // ── Search field ─────────────────────────────────────────────────────
+  const searchEl = document.getElementById('node-search');
+  searchEl.addEventListener('input',    e  => scheduleSearch(e.target.value ?? ''));
+  searchEl.addEventListener('wa-clear', () => { clearTimeout(_searchTimer); applySearch(''); });
+  searchEl.addEventListener('keydown',  e  => {
+    if (e.key === 'Escape') { searchEl.value = ''; clearTimeout(_searchTimer); applySearch(''); }
+  });
+
+  // ── Zoom / fit / export ───────────────────────────────────────────────
+  const midPt = () => ({ x: cy.width() / 2, y: cy.height() / 2 });
+  document.getElementById('btn-zoom-in').addEventListener('click',
+    () => cy.zoom({ level: cy.zoom() * 1.25, renderedPosition: midPt() }));
+  document.getElementById('btn-zoom-out').addEventListener('click',
+    () => cy.zoom({ level: cy.zoom() * 0.80, renderedPosition: midPt() }));
+  document.getElementById('btn-fit').addEventListener('click',
+    () => cy.fit(undefined, 40));
+
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const blob = cy.png({ output: 'blob', bg: '#f3f4f6', scale: 2 });
+    const url  = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: 'rdf-graph.png' }).click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+</body>
+</html>

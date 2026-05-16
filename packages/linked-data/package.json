@@ -15,7 +15,8 @@
   "files": [
     "extensions/**/*.ts",
     "!extensions/**/__tests__",
-    "skills"
+    "skills",
+    "tools"
   ],
   "scripts": {
     "test": "vitest"

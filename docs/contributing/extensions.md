@@ -30,4 +30,5 @@ Refer to existing extensions for the established pattern.
 
 ## Keeping changelog
 
-- each change must be added to the packages CHANGELOG.md following the existing pattern. Only include high-level user-facing changes, no implementation details.
+- Each change must be added to the package's `CHANGELOG.md` under `[Unreleased]`, following the existing pattern.
+- **High-level only** — one bullet per capability or fix, written from the user's perspective. Do not list intermediate refactors, internal module splits, or implementation steps taken along the way. Consolidate a series of iterative commits into a single, outcome-focused entry.

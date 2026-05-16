@@ -69,6 +69,12 @@ Pi uses `sparql_query_wikidata`, which pre-injects all standard Wikidata prefixe
 | `discover_rdf_files` | Finds all RDF data files in the workspace |
 | `discover_sparql_queries` | Finds all `.rq` / `.sparql` query files in the workspace |
 
+### Commands
+
+| Command | Description |
+|---|---|
+| `/rdf-memory-explorer` | Starts a local HTTP server and prints the URL in the chat — open it in any browser to browse stores and run SPARQL queries visually. Works in containers and remote environments. |
+
 ### Skills
 
 Skills guide Pi on when and how to use the tools:
