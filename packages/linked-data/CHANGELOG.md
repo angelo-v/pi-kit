@@ -11,10 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `rdf-memory` skill & tools: memorize facts as RDF-Star and recall them across sessions
 
-### Changed
-
-- `rdf-memory` skill: recalling memory now follows a mandatory multi-step workflow (list stores → query chunk index → explore graph structure → query semantically → present faithfully), mirroring the approach used by the Wikidata and local-file SPARQL skills
-
 ## 0.6.1
 
 ### Fixed

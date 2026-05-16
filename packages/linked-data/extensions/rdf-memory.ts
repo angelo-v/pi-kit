@@ -21,8 +21,8 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import { mkdirSync } from "node:fs";
 
 import {
   resolveStorePath,
@@ -34,30 +34,21 @@ import {
   serializeQuads,
   defaultStoreDir,
 } from "./lib/oxigraph-store.js";
-import { mkdirSync } from "node:fs";
+import {
+  CHUNK_BASE,
+  wrapFactsInGraph,
+  buildMetaUpdate,
+  newChunkId,
+  nowIso,
+} from "./lib/rdf-memory-chunks.js";
+import {
+  formatRecordResult,
+  formatStoresTable,
+  formatUpdateResult,
+  formatDropResult,
+} from "./lib/rdf-memory-format.js";
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const MEM_NS = "urn:pi-kit:linked-data:rdf-memory:";
-const META_GRAPH = MEM_NS + "meta";
-const CHUNK_BASE = MEM_NS + "chunk-";
-
-/** Standard prefixes prepended to agent-supplied Turtle facts. */
-const STANDARD_PREFIXES = [
-  `PREFIX mem:    <${MEM_NS}>`,
-  "PREFIX prov:   <http://www.w3.org/ns/prov#>",
-  "PREFIX xsd:    <http://www.w3.org/2001/XMLSchema#>",
-  "PREFIX dct:    <http://purl.org/dc/terms/>",
-  "PREFIX schema: <https://schema.org/>",
-  "PREFIX rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>",
-  "PREFIX rdfs:   <http://www.w3.org/2000/01/rdf-schema#>",
-  "PREFIX owl:    <http://www.w3.org/2002/07/owl#>",
-  "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>",
-  "PREFIX skos:   <http://www.w3.org/2004/02/skos/core#>",
-  "PREFIX vcard:  <http://www.w3.org/2006/vcard/ns#>",
-].join("\n");
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Store access ─────────────────────────────────────────────────────────────
 
 /** Resolve and open a store by name relative to the default store directory. */
 function getStore(name: string) {
@@ -65,65 +56,6 @@ function getStore(name: string) {
   mkdirSync(dir, { recursive: true });
   const storePath = resolveStorePath(name, dir);
   return { storePath, store: openStore(storePath) };
-}
-
-/**
- * Wrap Turtle-star fact content in a TriG named-graph block.
- * toNamedGraph does not propagate to RDF-star reifiers, so we must
- * wrap in TriG to ensure all quads (including reifier triples) land
- * in the correct named graph.
- *
- * PREFIX / @prefix declarations must appear outside graph blocks in TriG.
- * We extract any user-supplied prefix lines from the facts string and hoist
- * them above the graph block, so agents can bring their own prefixes.
- */
-function wrapFactsInGraph(chunkIri: string, turtleFacts: string): string {
-  const prefixLines: string[] = [];
-  const bodyLines: string[] = [];
-  for (const line of turtleFacts.split('\n')) {
-    if (/^\s*(PREFIX|@prefix)\s/i.test(line)) {
-      prefixLines.push(line.trim());
-    } else {
-      bodyLines.push(line);
-    }
-  }
-  const extraPrefixes = prefixLines.length ? '\n' + prefixLines.join('\n') : '';
-  return `${STANDARD_PREFIXES}${extraPrefixes}\n\n<${chunkIri}> {\n${bodyLines.join('\n')}\n}`;
-}
-
-/**
- * Build a SPARQL UPDATE string that registers a chunk in the meta graph.
- * Escapes source / topic strings for safe embedding in a SPARQL literal.
- */
-function buildMetaUpdate(
-  chunkIri: string,
-  recordedAt: string,
-  source: string,
-  topic: string | undefined
-): string {
-  const esc = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
-  const topicLine = topic ? `\n    <${chunkIri}> <http://purl.org/dc/terms/subject> "${esc(topic)}" .` : "";
-  return (
-    `PREFIX mem: <${MEM_NS}>\n` +
-    `PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>\n` +
-    `INSERT DATA {\n` +
-    `  GRAPH <${META_GRAPH}> {\n` +
-    `    <${chunkIri}> a mem:MemoryChunk ;\n` +
-    `      mem:recordedAt "${recordedAt}"^^xsd:dateTime ;\n` +
-    `      mem:source "${esc(source)}" .${topicLine}\n` +
-    `  }\n` +
-    `}`
-  );
-}
-
-/** Generate a short random hex ID for a chunk IRI. */
-function newChunkId(): string {
-  return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-}
-
-/** Return the current UTC datetime as an xsd:dateTime string (no milliseconds). */
-function nowIso(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
 // ── Extension ────────────────────────────────────────────────────────────────
@@ -188,33 +120,27 @@ export default function (pi: ExtensionAPI) {
         const chunkIri = CHUNK_BASE + chunkId;
         const recordedAt = nowIso();
 
-        // Load facts into the chunk's named graph
         const trig = wrapFactsInGraph(chunkIri, params.facts);
         const sizeBefore = store.size;
         store.load(trig, { format: "application/trig" });
         const factsAdded = store.size - sizeBefore;
 
-        // Register chunk in the meta graph
-        const metaUpdate = buildMetaUpdate(chunkIri, recordedAt, params.source, params.topic);
-        store.update(metaUpdate);
-
+        store.update(buildMetaUpdate(chunkIri, recordedAt, params.source, params.topic));
         flushStore(storePath);
-        const totalSize = store.size;
+
+        const text = formatRecordResult({
+          chunkIri,
+          recordedAt,
+          storeName: params.store,
+          source: params.source,
+          topic: params.topic,
+          factsAdded,
+          totalQuads: store.size,
+        });
 
         return {
-          content: [
-            {
-              type: "text",
-              text:
-                `Recorded memory chunk <${chunkIri}>\n` +
-                `  recordedAt: ${recordedAt}\n` +
-                `  source:     ${params.source}\n` +
-                (params.topic ? `  topic:      ${params.topic}\n` : "") +
-                `  facts:      ${factsAdded} quad(s) added\n` +
-                `  store:      '${params.store}' (${totalSize} quads total)`,
-            },
-          ],
-          details: { chunkIri, recordedAt, store: params.store, factsAdded, totalSize },
+          content: [{ type: "text", text }],
+          details: { chunkIri, recordedAt, store: params.store, factsAdded, totalQuads: store.size },
         };
       } catch (err: any) {
         return {
@@ -248,23 +174,20 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      const rows: string[] = ["| name | path | quads |", "| --- | --- | --- |"];
       const details: any[] = [];
-
-      for (const entry of entries) {
+      const tableEntries = entries.map((entry) => {
         try {
           const store = openStore(entry.path);
-          const size = store.size;
-          rows.push(`| ${entry.name} | ${entry.path} | ${size} |`);
-          details.push({ name: entry.name, path: entry.path, quads: size });
+          details.push({ name: entry.name, path: entry.path, quads: store.size });
+          return { name: entry.name, path: entry.path, quads: store.size };
         } catch (err: any) {
-          rows.push(`| ${entry.name} | ${entry.path} | error: ${err.message} |`);
           details.push({ name: entry.name, path: entry.path, error: err.message });
+          return { name: entry.name, path: entry.path, error: err.message };
         }
-      }
+      });
 
       return {
-        content: [{ type: "text", text: rows.join("\n") }],
+        content: [{ type: "text", text: formatStoresTable(tableEntries) }],
         details: { stores: details },
       };
     },
@@ -362,18 +285,17 @@ export default function (pi: ExtensionAPI) {
         const { storePath, store } = getStore(params.store);
         const sizeBefore = store.size;
         store.update(params.update);
-        const sizeAfter = store.size;
-        const delta = sizeAfter - sizeBefore;
         flushStore(storePath);
 
+        const text = formatUpdateResult({
+          storeName: params.store,
+          sizeBefore,
+          sizeAfter: store.size,
+        });
+
         return {
-          content: [
-            {
-              type: "text",
-              text: `Update applied to store '${params.store}'. Delta: ${delta >= 0 ? "+" : ""}${delta}. Total: ${sizeAfter} quad(s).`,
-            },
-          ],
-          details: { store: params.store, sizeBefore, sizeAfter, delta },
+          content: [{ type: "text", text }],
+          details: { store: params.store, sizeBefore, sizeAfter: store.size, delta: store.size - sizeBefore },
         };
       } catch (err: any) {
         return {
@@ -416,18 +338,18 @@ export default function (pi: ExtensionAPI) {
           store.update("CLEAR ALL");
         }
 
-        const sizeAfter = store.size;
         flushStore(storePath);
-        const scope = params.graph ? `graph <${params.graph}>` : "all graphs";
+
+        const text = formatDropResult({
+          storeName: params.store,
+          graph: params.graph,
+          sizeBefore,
+          sizeAfter: store.size,
+        });
 
         return {
-          content: [
-            {
-              type: "text",
-              text: `Cleared ${scope} in store '${params.store}'. Removed ${sizeBefore - sizeAfter} quad(s). Remaining: ${sizeAfter}.`,
-            },
-          ],
-          details: { store: params.store, sizeBefore, sizeAfter },
+          content: [{ type: "text", text }],
+          details: { store: params.store, sizeBefore, sizeAfter: store.size },
         };
       } catch (err: any) {
         return {
