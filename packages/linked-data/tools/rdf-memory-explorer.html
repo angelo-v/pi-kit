@@ -948,7 +948,7 @@
     elements:  [],
     style:     CY_STYLE,
     layout:    { name: 'grid' },
-    wheelSensitivity: 0.3,
+    wheelSensitivity: 2,
   });
 
   // ── Render helpers ───────────────────────────────────────────────────
@@ -1391,9 +1391,9 @@
   // ── Zoom / fit / export ───────────────────────────────────────────────
   const midPt = () => ({ x: cy.width() / 2, y: cy.height() / 2 });
   document.getElementById('btn-zoom-in').addEventListener('click',
-    () => cy.zoom({ level: cy.zoom() * 1.25, renderedPosition: midPt() }));
+    () => cy.zoom({ level: cy.zoom() * 1.5, renderedPosition: midPt() }));
   document.getElementById('btn-zoom-out').addEventListener('click',
-    () => cy.zoom({ level: cy.zoom() * 0.80, renderedPosition: midPt() }));
+    () => cy.zoom({ level: cy.zoom() * 0.67, renderedPosition: midPt() }));
   document.getElementById('btn-fit').addEventListener('click',
     () => cy.fit(undefined, 40));
 
