@@ -21,6 +21,7 @@
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { mkdirSync } from "node:fs";
 
@@ -44,6 +45,7 @@ import {
 import {
   formatRecordResult,
   formatStoresTable,
+  formatQueryResult,
   formatUpdateResult,
   formatDropResult,
 } from "./lib/rdf-memory-format.js";
@@ -212,7 +214,22 @@ export default function (pi: ExtensionAPI) {
       query: Type.String({
         description: "SPARQL 1.1 query string (SELECT, ASK, CONSTRUCT, or DESCRIBE). Include PREFIX declarations.",
       }),
+      description: Type.String({
+        description:
+          "One sentence, plain English, describing exactly what this query retrieves — " +
+          "specific enough to be self-explanatory without reading the SPARQL (e.g. 'All Persons older than 30', not 'Query data for Person').",
+      }),
     }),
+
+    renderCall(args, theme) {
+      const desc = typeof args.description === "string" ? args.description : "…";
+      return new Text(
+        theme.fg("toolTitle", theme.bold("rdf_memory_query ")) +
+          theme.fg("dim", desc),
+        0,
+        0
+      );
+    },
 
     async execute(_id, params, _signal, _onUpdate, _ctx) {
       try {
@@ -226,7 +243,10 @@ export default function (pi: ExtensionAPI) {
           const iter = result[Symbol.iterator]();
           const first = iter.next();
           if (first.done) {
-            text = "(no results)";
+            text =
+              "STOP! no results! Your approach is probably wrong. Follow instructions before proceeding:\n" +
+              "You MUST load the **rdf-memory** skill\n" +
+              "If the problem persists consult `skills/rdf-memory/reference.md`";
           } else {
             function* rechain(head: any, rest: Iterator<any>) {
               yield head;
