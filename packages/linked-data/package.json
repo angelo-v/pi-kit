@@ -33,6 +33,7 @@
     "n3": "^2.0.3",
     "oxigraph": "^0.5.8",
     "rdf-validate-shacl": "^0.6.5",
+    "rdflib": "^2.3.8",
     "shacl-engine": "^1.1.0"
   },
   "repository": {

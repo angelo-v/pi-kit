@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ld_fetch` tool — dereferences a Linked Data URI, content-negotiates an RDF representation, parses it with rdflib's Fetcher (Turtle, JSON-LD, RDF/XML, N-Triples, HTML+RDFa), and stores the resulting quads in the Oxigraph `"fetched-data"` store under `GRAPH <uri>`. Re-fetching the same URI replaces the graph atomically.
+- `linked-data-fetch` skill — guides the agent through the fetch → query cycle, re-fetching, metadata inspection, and link-following with `owl:sameAs` / `rdfs:seeAlso`.
 - `rdf-memory` skill & tools: persist and query RDF-Star knowledge graphs across sessions
 - `/rdf-memory-explorer` command: browse and inspect persisted RDF memory via a local web UI
 - Auto-cache SPARQL endpoint results: every successful `sparql_query_endpoint` and `sparql_query_wikidata` call is automatically persisted to a per-endpoint RDF memory store
