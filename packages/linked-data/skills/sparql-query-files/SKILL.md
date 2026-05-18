@@ -17,20 +17,11 @@ Run `discover_rdf_files` to find all available `.ttl`, `.rdf`, `.n3`, `.jsonld`,
 Do **not** guess file paths — always discover first.
 
 ### Step 3 — Explore graph structure
-Before writing a domain-specific query, run a discovery query to understand what classes and properties exist:
-
-```sparql
--- Discover all classes in the graph
-SELECT DISTINCT ?class WHERE { ?s a ?class } ORDER BY ?class
-
--- Count instances by class
-SELECT ?class (COUNT(?s) AS ?count) WHERE {
-  ?s a ?class
-} GROUP BY ?class ORDER BY DESC(?count)
-
--- Discover all properties
-SELECT DISTINCT ?prop WHERE { ?s ?prop ?o } ORDER BY ?prop
+Before writing a domain-specific query, call `rdf_schema_overview` with the discovered files:
 ```
+rdf_schema_overview(files=["path/to/file.ttl", ...])
+```
+This returns types and predicates with counts in one call — no guessing IRIs.
 
 ### Step 4 — Query semantically
 Traverse named individuals; use text `FILTER` only as a last resort.

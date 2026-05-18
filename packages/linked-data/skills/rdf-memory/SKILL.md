@@ -41,7 +41,14 @@ rdf_memory_stores()
 ```
 Never assume store names — always discover first.
 
-### 2 — Query the chunk index
+### 2 — Get schema overview (mandatory before querying)
+Before writing any SPARQL query, call `rdf_schema_overview` to see which types and predicates are actually present:
+```
+rdf_schema_overview(store="<store-name>")
+```
+This prevents guessing wrong class or property IRIs.
+
+### 3 — Query the chunk index
 ```sparql
 PREFIX mem: <urn:pi-kit:linked-data:rdf-memory:>
 PREFIX dct: <http://purl.org/dc/terms/>
@@ -51,16 +58,6 @@ SELECT ?chunk ?when ?topic ?source WHERE {
     OPTIONAL { ?chunk dct:subject ?topic }
   }
 } ORDER BY DESC(?when)
-```
-
-### 3 — Explore structure (before any domain query)
-Count types to understand what's stored — never guess class or property IRIs:
-```sparql
-PREFIX mem: <urn:pi-kit:linked-data:rdf-memory:>
-SELECT ?type (COUNT(DISTINCT ?s) AS ?count) WHERE {
-  GRAPH <urn:pi-kit:linked-data:rdf-memory:meta> { ?chunk a mem:MemoryChunk . }
-  GRAPH ?chunk { ?s a ?type . }
-} GROUP BY ?type ORDER BY DESC(?count)
 ```
 
 ### 4 — Query facts (scoped)

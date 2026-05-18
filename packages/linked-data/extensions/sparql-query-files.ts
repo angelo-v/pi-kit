@@ -31,6 +31,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use sparql_query_files to query, explore, or analyse local RDF/Turtle files with SPARQL.",
       "Always prefer named-individual graph traversal over FILTER(CONTAINS(...)) string matching.",
+      "Before writing a query against an unfamiliar file set, call rdf_schema_overview(files=[...]) first to discover which types and predicates are present.",
     ],
     parameters: Type.Object({
       files: Type.Array(Type.String(), {

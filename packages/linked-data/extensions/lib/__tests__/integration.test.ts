@@ -14,6 +14,7 @@ import { resolveSources } from "../resolve-sources.js";
 import { buildArgs } from "../format.js";
 import { ensureLimit, DEFAULT_LIMIT } from "../limit-query.js";
 import { runQuery } from "../run-query.js";
+import { overviewFromFiles } from "../rdf-schema-overview.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES   = join(__dirname, "fixtures");
@@ -149,5 +150,41 @@ describe("integration: resolveSources missing-file handling", () => {
     expect(missing[0]).toContain("does-not-exist.ttl");
     expect(sources).toHaveLength(1);
     expect(sources[0]).toMatch(/^file:\/\//);
+  });
+});
+
+// ── rdf-schema-overview (files backend) ──────────────────────────────────────
+
+describe("integration: overviewFromFiles", () => {
+  it("returns the expected types from a local Turtle file", async () => {
+    const overview = await overviewFromFiles([BOOKS_TTL], BINARY, CWD);
+    const typeIris = overview.types.map((r) => r.iri);
+    expect(typeIris).toContain("http://example.org/Book");
+    expect(typeIris).toContain("http://example.org/Author");
+  });
+
+  it("returns correct counts for types", async () => {
+    const overview = await overviewFromFiles([BOOKS_TTL], BINARY, CWD);
+    const book   = overview.types.find((r) => r.iri === "http://example.org/Book");
+    const author = overview.types.find((r) => r.iri === "http://example.org/Author");
+    expect(book?.count).toBe(2);
+    expect(author?.count).toBe(2);
+  });
+
+  it("returns predicates used in a local Turtle file", async () => {
+    const overview = await overviewFromFiles([BOOKS_TTL], BINARY, CWD);
+    const predIris = overview.predicates.map((r) => r.iri);
+    expect(predIris).toContain("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+    expect(predIris).toContain("http://www.w3.org/2000/01/rdf-schema#label");
+    expect(predIris).toContain("http://example.org/author");
+  });
+
+  it("returns correct count for rdf:type predicate", async () => {
+    const overview = await overviewFromFiles([BOOKS_TTL], BINARY, CWD);
+    const rdfType = overview.predicates.find(
+      (r) => r.iri === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+    );
+    // 4 subjects each have exactly one rdf:type triple
+    expect(rdfType?.count).toBe(4);
   });
 });

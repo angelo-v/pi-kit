@@ -206,6 +206,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use rdf_memory_query to run SPARQL SELECT, ASK, CONSTRUCT, or DESCRIBE against a named persistent RDF store.",
       "Call rdf_memory_stores first if you are unsure which stores exist.",
+      "Before writing a query against an unfamiliar store, call rdf_schema_overview(store=\"<name>\") to discover which types and predicates are present.",
     ],
     parameters: Type.Object({
       store: Type.String({
