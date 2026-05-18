@@ -370,7 +370,7 @@
       transition: border-color .15s, box-shadow .15s;
     }
     .chunk-card:hover { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand-light); }
-    .chunk-card.active { border-color: var(--color-brand); background: var(--color-brand-light); }
+    .chunk-card.active { border-color: var(--color-brand); background: var(--color-brand-light); outline: 2px solid var(--color-brand); }
     .chunk-name {
       font-size: var(--text-sm);
       font-weight: 700;
@@ -598,6 +598,11 @@
       <graph-detail></graph-detail>
     </div>
     <div class="panel-body hidden" id="panel-body-chunks">
+      <div id="chunk-filter-info" style="display:none;margin-bottom:var(--space-3);padding:var(--space-2) var(--space-3);background:var(--color-brand-light);border:1px solid var(--color-brand);border-radius:var(--radius);font-size:11px;line-height:1.4">
+        <strong>Graph filtered to chunk</strong><br>
+        <span id="chunk-filter-label" style="font-family:var(--font-mono,monospace);word-break:break-all"></span>
+        <button id="chunk-filter-clear" title="Clear filter" style="float:right;margin-left:var(--space-2);background:none;border:none;cursor:pointer;color:var(--color-brand);font-size:14px;line-height:1">✕</button>
+      </div>
       <chunk-list></chunk-list>
     </div>
     <div class="panel-body hidden" id="panel-body-queries">
@@ -615,6 +620,9 @@
   /** @type {Map<string, import('n3').Quad[]>} storeName → quads */
   const storeQuads = new Map();
   let currentStore = null;
+
+  /** IRI of the currently-active chunk filter, or null for the full store. */
+  let activeChunkFilter = null;
 
   /**
    * Per-store annotation index.
@@ -1149,18 +1157,92 @@
     };
   }
 
+  // Thresholds for layout auto-downgrade and graph-skip.
+  const LAYOUT_DOWNGRADE_THRESHOLD = 500;  // switch cose → grid above this
+  const GRAPH_SKIP_THRESHOLD       = 1000; // skip graph entirely above this
+
+  function chooseLayout(nodeCount) {
+    const selected = getLayoutName();
+    if (nodeCount > LAYOUT_DOWNGRADE_THRESHOLD && selected === 'cose') {
+      return 'grid'; // cose is O(n²); fall back to O(n) grid
+    }
+    return selected;
+  }
+
+  /** Show or hide the chunk-filter info bar above the chunk list. */
+  function updateChunkFilterInfo() {
+    const bar   = document.getElementById('chunk-filter-info');
+    const label = document.getElementById('chunk-filter-label');
+    if (!bar || !label) return;
+    if (activeChunkFilter) {
+      label.textContent = activeChunkFilter;
+      bar.style.display = 'block';
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
   function renderStore() {
     if (!currentStore) return;
     document.getElementById('loading').classList.remove('hidden');
 
-    const quads    = storeQuads.get(currentStore) ?? [];
+    const allQuads = storeQuads.get(currentStore) ?? [];
+    const quads    = activeChunkFilter
+      ? allQuads.filter(q => q.graph?.value === activeChunkFilter)
+      : allQuads;
     const { elements, nodeGraphs } = buildElements(quads, getOpts());
     storeNodeGraphs.set(currentStore, nodeGraphs);
 
+    // Remove any previous large-graph banner.
+    document.getElementById('large-graph-banner')?.remove();
+
+    const nodeCount = elements.filter(el => el.group === 'nodes' || !el.group).length;
+
+    if (nodeCount > GRAPH_SKIP_THRESHOLD) {
+      // Graph is too large to render usefully — skip it and auto-switch to Chunks.
+      cy.elements().remove();
+      updateStats();
+      document.getElementById('loading').classList.add('hidden');
+      detail.clear();
+      document.querySelector('chunk-list').refresh();
+      document.querySelector('query-list').refresh();
+
+      // Show a banner in the graph panel explaining what happened.
+      const cyContainer = document.getElementById('cy');
+      if (cyContainer) {
+        const banner = document.createElement('div');
+        banner.id = 'large-graph-banner';
+        banner.style.cssText = [
+          'position:absolute','top:50%','left:50%',
+          'transform:translate(-50%,-50%)',
+          'background:var(--wa-color-warning-subtle,#fff8e1)',
+          'border:1px solid var(--wa-color-warning-border,#f9a825)',
+          'border-radius:8px','padding:20px 28px',
+          'text-align:center','max-width:420px',
+          'font-size:13px','line-height:1.6','z-index:10',
+          'box-shadow:0 2px 8px rgba(0,0,0,.15)',
+        ].join(';');
+        banner.innerHTML = `
+          <strong>⚠ Graph too large to render</strong><br>
+          This store has <strong>${nodeCount.toLocaleString()} nodes</strong>
+          (limit: ${GRAPH_SKIP_THRESHOLD.toLocaleString()}).<br>
+          Force-directed layout would hang the browser at this scale.<br>
+          Switched to <em>Chunks</em> tab instead.
+        `;
+        cyContainer.style.position = 'relative';
+        cyContainer.appendChild(banner);
+      }
+
+      switchTab('chunks');
+      return;
+    }
+
     cy.elements().remove();
     cy.add(elements);
+
+    const layoutName = chooseLayout(nodeCount);
     cy.layout({
-      name: getLayoutName(),
+      name: layoutName,
       padding: 60,
       animate: false,
       nodeRepulsion: 8000,
@@ -1168,6 +1250,15 @@
       edgeElasticity: 0.45,
       gravity: 0.25,
     }).run();
+
+    // Warn user if we silently downgraded from force-directed.
+    const selectedLayout = getLayoutName();
+    if (selectedLayout === 'cose' && layoutName !== 'cose') {
+      console.info(
+        `[rdf-explorer] Auto-downgraded layout cose → ${layoutName} ` +
+        `(${nodeCount} nodes > ${LAYOUT_DOWNGRADE_THRESHOLD} threshold).`
+      );
+    }
 
     updateStats();
     document.getElementById('loading').classList.add('hidden');
@@ -1182,7 +1273,54 @@
       switchTab('queries');
     }
 
+    updateChunkFilterInfo();
+
     // re-apply any active search after graph is rebuilt
+    const searchEl = document.getElementById('node-search');
+    if (searchEl) applySearch(searchEl.value ?? '');
+  }
+
+  /** Activate a chunk filter (or clear if clicking the active one). */
+  function selectChunk(iri) {
+    activeChunkFilter = (activeChunkFilter === iri) ? null : iri;
+    // Always render with the new filter — a single chunk is small enough.
+    renderStoreFiltered();
+    // Switch to the Selection panel so the user can immediately click nodes.
+    switchTab('selection');
+  }
+
+  /**
+   * Like renderStore() but skips the GRAPH_SKIP_THRESHOLD guard.
+   * Used when a chunk filter is active (the subset is almost always small).
+   */
+  function renderStoreFiltered() {
+    if (!currentStore) return;
+    document.getElementById('loading').classList.remove('hidden');
+
+    const allQuads = storeQuads.get(currentStore) ?? [];
+    const quads    = activeChunkFilter
+      ? allQuads.filter(q => q.graph?.value === activeChunkFilter)
+      : allQuads;
+    const { elements, nodeGraphs } = buildElements(quads, getOpts());
+    storeNodeGraphs.set(currentStore, nodeGraphs);
+
+    document.getElementById('large-graph-banner')?.remove();
+
+    cy.elements().remove();
+    cy.add(elements);
+
+    const nodeCount  = elements.filter(el => el.group === 'nodes' || !el.group).length;
+    const layoutName = chooseLayout(nodeCount);
+    cy.layout({ name: layoutName, padding: 60, animate: false,
+      nodeRepulsion: 8000, idealEdgeLength: 80, edgeElasticity: 0.45, gravity: 0.25 }).run();
+
+    updateStats();
+    document.getElementById('loading').classList.add('hidden');
+    detail.clear();
+    document.querySelector('chunk-list').refresh();
+    document.querySelector('query-list').refresh();
+    updateChunkFilterInfo();
+
     const searchEl = document.getElementById('node-search');
     if (searchEl) applySearch(searchEl.value ?? '');
   }
@@ -1442,7 +1580,9 @@
           }
         }
 
-        html += `<div class="chunk-card" data-iri="${escHtml(iri)}">
+        const isActive = iri === activeChunkFilter;
+        html += `<div class="chunk-card${isActive ? ' active' : ''}" data-iri="${escHtml(iri)}"
+          title="${isActive ? 'Click to clear filter' : 'Click to filter graph to this chunk'}">
           <div class="chunk-name">${escHtml(shortIri)}</div>
           <div class="chunk-meta"><strong>Recorded:</strong> ${date}</div>
           ${topic}
@@ -1456,6 +1596,20 @@
     }
   }
   customElements.define('chunk-list', ChunkList);
+
+  // Chunk card click → filter graph
+  document.querySelector('chunk-list').addEventListener('click', e => {
+    const card = e.target.closest('.chunk-card');
+    if (!card) return;
+    selectChunk(card.dataset.iri);
+  });
+
+  // Chunk-filter clear button
+  document.getElementById('chunk-filter-clear').addEventListener('click', () => {
+    activeChunkFilter = null;
+    renderStore();
+    document.querySelector('chunk-list')?.refresh();
+  });
 
   // ── <query-list> custom element ────────────────────────────────────────
   class QueryList extends HTMLElement {
@@ -1549,6 +1703,7 @@
   // ── Store picker ─────────────────────────────────────────────────────
   document.getElementById('store-select').addEventListener('change', e => {
     currentStore = e.target.value;
+    activeChunkFilter = null;
     renderStore();
   });
 
@@ -1639,7 +1794,17 @@
 
   // ── Layout picker ─────────────────────────────────────────────────────
   document.getElementById('layout-select').addEventListener('change', e => {
-    const name = e.target.value || 'cose';
+    const selected = e.target.value || 'cose';
+    const nodeCount = cy.nodes().length;
+    const name = (selected === 'cose' && nodeCount > LAYOUT_DOWNGRADE_THRESHOLD)
+      ? 'grid'
+      : selected;
+    if (name !== selected) {
+      console.info(
+        `[rdf-explorer] Auto-downgraded layout ${selected} → ${name} ` +
+        `(${nodeCount} nodes > ${LAYOUT_DOWNGRADE_THRESHOLD} threshold).`
+      );
+    }
     cy.layout({ name, padding: 60, animate: true }).run();
   });
 
