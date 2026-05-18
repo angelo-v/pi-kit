@@ -7,12 +7,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync, renameSync, existsSync, statSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Store } from "oxigraph";
 import type { Term } from "oxigraph";
 import { ldFetch, FETCHED_DATA_STORE } from "../ld-fetch-store.js";
-import { openStore, resolveStorePath } from "../oxigraph-store.js";
+import { openStore, resolveStorePath, flushStore } from "../oxigraph-store.js";
 import { CHUNK_BASE, META_GRAPH, MEM_NS } from "../rdf-memory-chunks.js";
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
@@ -268,5 +269,76 @@ describe("ldFetch — hash URIs", () => {
        }`
     ) as Map<string, Term>[];
     expect(rows).toHaveLength(1);
+  });
+});
+
+// ── Cross-extension stale-cache regression ────────────────────────────────────
+
+describe("openStore — cross-extension cache invalidation", () => {
+  /**
+   * Regression test for the ld_fetch ↔ rdf_memory_query stale-cache bug.
+   *
+   * Root cause: jiti (pi's extension loader) sets `moduleCache: false`, so
+   * each extension file (`ld-fetch.ts`, `rdf-memory.ts`) gets its own
+   * module-level registry Map. A store opened and cached by extension A is
+   * invisible to extension B's registry.
+   *
+   * Fix: openStore compares the registry entry's `loadedMtime` against the
+   * current mtime of `data.nq`. If the file has been updated by another
+   * module context since the cached entry was loaded, the cache is discarded
+   * and the store is reloaded from disk.
+   *
+   * We simulate two extension contexts by writing directly to disk with a
+   * raw Oxigraph Store (bypassing the registry), then verifying that a
+   * subsequent openStore() in our test registry picks up the new data.
+   */
+  it("reloads from disk when another module context has written newer data", () => {
+    const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
+    mkdirSync(storePath, { recursive: true });
+
+    // Seed the registry with an empty store (simulates rdf_memory_stores
+    // or a prior rdf_memory_query that opened the store before ld_fetch ran).
+    const emptyStore = openStore(storePath);
+    expect(emptyStore.size).toBe(0);
+
+    // Simulate ld_fetch running in a SEPARATE module context:
+    // write data directly to disk via a raw Store (no registry involvement).
+    const externalStore = new Store();
+    externalStore.load(
+      `<http://example.org/Cat> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Class> <${EXAMPLE_URI}> .`,
+      { format: "application/n-quads" }
+    );
+    const nq = externalStore.dump({ format: "application/n-quads" });
+    const dataFile = join(storePath, "data.nq");
+    const tmpFile  = dataFile + ".tmp";
+    writeFileSync(tmpFile, nq, "utf8");
+    renameSync(tmpFile, dataFile);
+
+    // Now ask OUR registry to open the same store. It must detect that
+    // data.nq is newer than the cached entry and reload from disk.
+    const refreshedStore = openStore(storePath);
+    const bindings = refreshedStore.query(
+      `SELECT ?s ?p ?o WHERE { GRAPH <${EXAMPLE_URI}> { ?s ?p ?o } }`
+    ) as Map<string, Term>[];
+
+    expect(bindings.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT reload from disk after a flush performed by this registry", () => {
+    const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
+    mkdirSync(storePath, { recursive: true });
+
+    // Write and flush via our registry.
+    const store = openStore(storePath);
+    store.load(
+      `<http://example.org/Dog> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Class> <${EXAMPLE_URI}> .`,
+      { format: "application/n-quads" }
+    );
+    flushStore(storePath);
+
+    // The store object returned by openStore must be the SAME instance
+    // (no unnecessary reload after our own flush).
+    const sameStore = openStore(storePath);
+    expect(sameStore).toBe(store);
   });
 });

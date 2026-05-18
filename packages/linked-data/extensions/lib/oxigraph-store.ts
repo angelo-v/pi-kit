@@ -19,7 +19,7 @@
  */
 
 import { Store } from "oxigraph";
-import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, readdirSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync, renameSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 
 const NQ_FORMAT = "application/n-quads";
@@ -28,6 +28,8 @@ interface StoreEntry {
   store: Store;
   path: string; /** directory that holds the .nq file */
   dirty: boolean;
+  /** mtime (ms) of data.nq at the time this store was loaded from disk. */
+  loadedMtime: number;
 }
 
 /** Map from absolute store-directory path → open entry. */
@@ -36,6 +38,16 @@ const registry = new Map<string, StoreEntry>();
 /** Path to the N-Quads snapshot inside a store directory. */
 function dataFile(storePath: string): string {
   return join(storePath, "data.nq");
+}
+
+/** Return the mtime (ms) of the data.nq file, or 0 if it doesn't exist. */
+function diskMtime(storePath: string): number {
+  const file = dataFile(storePath);
+  try {
+    return existsSync(file) ? statSync(file).mtimeMs : 0;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -49,10 +61,22 @@ export function resolveStorePath(name: string, baseDir: string): string {
 /**
  * Open (or return the already-open) store at `storePath`.
  * Creates the directory and loads the persisted N-Quads file if it exists.
+ *
+ * Cache invalidation: if another process or extension has written a newer
+ * data.nq to disk since this store was last loaded, the cached entry is
+ * discarded and the store is re-read from disk. This makes cross-extension
+ * writes (e.g. ld_fetch → rdf_memory_query) immediately visible even though
+ * each extension has its own module-level registry due to jiti's
+ * `moduleCache: false` setting.
  */
 export function openStore(storePath: string): Store {
+  const currentMtime = diskMtime(storePath);
   const existing = registry.get(storePath);
-  if (existing) return existing.store;
+
+  if (existing && existing.loadedMtime >= currentMtime) {
+    // Cache is still fresh — return it directly.
+    return existing.store;
+  }
 
   mkdirSync(storePath, { recursive: true });
 
@@ -65,7 +89,7 @@ export function openStore(storePath: string): Store {
     }
   }
 
-  registry.set(storePath, { store, path: storePath, dirty: false });
+  registry.set(storePath, { store, path: storePath, dirty: false, loadedMtime: currentMtime });
   return store;
 }
 
@@ -82,6 +106,9 @@ export function flushStore(storePath: string): void {
   writeFileSync(tmp, nq, "utf8");
   renameSync(tmp, dataFile(storePath));
   entry.dirty = false;
+  // Record the new mtime so subsequent openStore() calls within the same
+  // module context don't needlessly re-read a file we just wrote.
+  entry.loadedMtime = diskMtime(storePath);
 }
 
 /**
@@ -109,7 +136,7 @@ export function closeAll(): void {
   for (const [path, entry] of registry.entries()) {
     try {
       flushStore(path);
-      entry.store.free();
+      (entry.store as any).free?.(); // WASM GC hint; not in TS declarations
     } catch {
       // ignore
     }
