@@ -19,15 +19,26 @@ import { defaultStoreDir } from "./lib/oxigraph-store.js";
 // ── Formatting ────────────────────────────────────────────────────────────────
 
 export function formatFetchResult(result: FetchResult): string {
-  return [
+  const lines = [
     `Fetched <${result.uri}>`,
     `Format:   ${result.format}`,
     `Triples:  ${result.tripleCount}`,
     `Graph:    <${result.graphIri}> in store "${FETCHED_DATA_STORE}"`,
     `Recorded: ${result.recordedAt}`,
-    ``,
-    `Query with: rdf_memory_query(store="${FETCHED_DATA_STORE}", query="SELECT … WHERE { GRAPH <${result.uri}> { … } }")`,
-  ].join("\n");
+  ];
+
+  if (result.isHashUri) {
+    lines.push(
+      `NOTE: Hash URI — data stored in GRAPH <${result.documentUri}>. Query that graph, do NOT re-fetch the document URI.`,
+      `Query with: rdf_memory_query(store="${FETCHED_DATA_STORE}", query="SELECT … WHERE { GRAPH <${result.documentUri}> { … } }")`,
+    );
+  } else {
+    lines.push(
+      `Query with: rdf_memory_query(store="${FETCHED_DATA_STORE}", query="SELECT … WHERE { GRAPH <${result.uri}> { … } }")`,
+    );
+  }
+
+  return lines.join("\n");
 }
 
 // ── Extension ─────────────────────────────────────────────────────────────────
@@ -44,8 +55,10 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: "Dereference a Linked Data URI and store its triples in the fetched-data store",
     promptGuidelines: [
       `Use ld_fetch whenever the user asks to "look up", "resolve", "fetch", or "get" a URI from the Web of Data — e.g. a vocabulary term, a FOAF profile, a schema.org type, or a Wikidata entity page.`,
-      `After fetching, query the payload graph with rdf_memory_query scoped to GRAPH <uri> in store "${FETCHED_DATA_STORE}".`,
-      `Use rdf_memory_drop(store="${FETCHED_DATA_STORE}", graph=<uri>) to force a re-fetch when the user wants fresh data.`,
+      `After fetching, query the payload graph with rdf_memory_query scoped to GRAPH <graphIri> in store "${FETCHED_DATA_STORE}". Always use the graphIri returned in the result, not the requested URI.`,
+      `Hash URIs (containing '#'): the HTTP fetch is made to the document URI (before '#'). All triples from the document are stored in GRAPH <documentUri>. The fragment identifies a resource within that document. Query GRAPH <documentUri> — do NOT make a separate fetch without the hash.`,
+      `Trailing-slash URIs: rdflib automatically strips a trailing slash from URIs when indexing triples. The graphIri in the result will NOT have the trailing slash even if the requested URI did. Always use the graphIri returned in the result when querying — never reconstruct the graph IRI manually from the input URI.`,
+      `Use rdf_memory_drop(store="${FETCHED_DATA_STORE}", graph=<graphIri>) to force a re-fetch when the user wants fresh data.`,
       `Follow owl:sameAs and rdfs:seeAlso links by calling ld_fetch again on the linked URIs.`,
       `Chain with rdf_memory_query rather than sparql_query_files — the data is already in memory.`,
     ],

@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Term } from "oxigraph";
 import { ldFetch, FETCHED_DATA_STORE } from "../ld-fetch-store.js";
 import { openStore, resolveStorePath } from "../oxigraph-store.js";
 import { CHUNK_BASE, META_GRAPH, MEM_NS } from "../rdf-memory-chunks.js";
@@ -17,6 +18,7 @@ import { CHUNK_BASE, META_GRAPH, MEM_NS } from "../rdf-memory-chunks.js";
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
 const EXAMPLE_URI = "http://example.org/vocab";
+const HASH_URI     = "http://example.org/vocab#Cat";
 const TURTLE_FIXTURE = `
   @prefix ex: <http://example.org/> .
   ex:Cat  a ex:Class .
@@ -51,8 +53,13 @@ vi.mock("../rdflib-import.js", async (importOriginal) => {
       }
       const body = TURTLE_FIXTURE;
       const contentType = "text/turtle";
+      // Use the document URI (no fragment) as the graph base, mirroring what
+      // the real Fetcher does: it strips the fragment before making the HTTP
+      // request and stores triples under the document URI.
+      const hashIndex = uri.indexOf("#");
+      const documentUri = hashIndex === -1 ? uri : uri.slice(0, hashIndex);
       // Use rdflib's real parse() so the store is populated exactly as in prod
-      real.parse(body, this.store, uri, contentType);
+      real.parse(body, this.store, documentUri, contentType);
 
       // Mirror what the real Fetcher writes into chrome://TheCurrentSession
       const sym = (iri: string) => this.store.sym(iri);
@@ -99,10 +106,9 @@ describe("ldFetch", () => {
 
     const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
     const oxiStore = openStore(storePath);
-    const results = oxiStore.query(
+    const bindings = oxiStore.query(
       `SELECT ?s ?p ?o WHERE { GRAPH <${EXAMPLE_URI}> { ?s ?p ?o } }`
-    );
-    const bindings = [...results];
+    ) as Map<string, Term>[];
 
     expect(bindings.length).toBeGreaterThan(0);
   });
@@ -116,10 +122,9 @@ describe("ldFetch", () => {
 
     const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
     const oxiStore = openStore(storePath);
-    const results = oxiStore.query(
+    const bindings = oxiStore.query(
       `SELECT ?s ?p ?o WHERE { GRAPH <${EXAMPLE_URI}> { ?s ?p ?o } }`
-    );
-    const bindings = [...results];
+    ) as Map<string, Term>[];
 
     // Triple count must match a single fetch, not double
     expect(bindings.length).toBe(first.tripleCount);
@@ -134,7 +139,7 @@ describe("ldFetch", () => {
 
     // mem:meta must have exactly one chunk entry whose subject is a chunk IRI
     // and which points back to the document URI via mem:fetchedFrom
-    const metaRows = [...oxiStore.query(
+    const metaRows = oxiStore.query(
       `PREFIX mem: <${MEM_NS}>
        SELECT ?chunk ?recordedAt WHERE {
          GRAPH <${META_GRAPH}> {
@@ -142,13 +147,13 @@ describe("ldFetch", () => {
                   mem:recordedAt  ?recordedAt .
          }
        }`
-    )];
+    ) as Map<string, Term>[];
     expect(metaRows).toHaveLength(1);
     const chunkIri = metaRows[0].get("chunk")?.value ?? "";
     expect(chunkIri).toMatch(new RegExp(`^${CHUNK_BASE}`));
 
     // The chunk graph holds the rdflib session triples
-    const sessionRows = [...oxiStore.query(
+    const sessionRows = oxiStore.query(
       `SELECT ?requestedURI ?status ?contentType WHERE {
          GRAPH <${chunkIri}> {
            ?req <http://www.w3.org/2007/ont/link#requestedURI> ?requestedURI ;
@@ -157,16 +162,16 @@ describe("ldFetch", () => {
                  <http://www.w3.org/2007/ont/httph#content-type> ?contentType .
          }
        }`
-    )];
+    ) as Map<string, Term>[];
     expect(sessionRows).toHaveLength(1);
     expect(sessionRows[0].get("requestedURI")?.value).toBe(EXAMPLE_URI);
     expect(sessionRows[0].get("status")?.value).toBe("200");
     expect(sessionRows[0].get("contentType")?.value).toBe("text/turtle");
 
     // chrome://TheCurrentSession must never reach Oxigraph
-    const rawSession = [...oxiStore.query(
+    const rawSession = oxiStore.query(
       `SELECT ?s WHERE { GRAPH <chrome://TheCurrentSession> { ?s ?p ?o } } LIMIT 1`
-    )];
+    ) as Map<string, Term>[];
     expect(rawSession).toHaveLength(0);
   });
 
@@ -178,23 +183,23 @@ describe("ldFetch", () => {
     const oxiStore = openStore(storePath);
 
     // Exactly one chunk for this URI in mem:meta (old one was replaced)
-    const metaRows = [...oxiStore.query(
+    const metaRows = oxiStore.query(
       `PREFIX mem: <${MEM_NS}>
        SELECT ?chunk WHERE {
          GRAPH <${META_GRAPH}> { ?chunk mem:fetchedFrom <${EXAMPLE_URI}> . }
        }`
-    )];
+    ) as Map<string, Term>[];
     expect(metaRows).toHaveLength(1);
 
     // That one chunk graph has exactly one request node
     const chunkIri = metaRows[0].get("chunk")?.value ?? "";
-    const reqRows = [...oxiStore.query(
+    const reqRows = oxiStore.query(
       `SELECT ?uri WHERE {
          GRAPH <${chunkIri}> {
            ?req <http://www.w3.org/2007/ont/link#requestedURI> ?uri .
          }
        }`
-    )];
+    ) as Map<string, Term>[];
     expect(reqRows).toHaveLength(1);
   });
 
@@ -204,5 +209,64 @@ describe("ldFetch", () => {
     await expect(ldFetch(EXAMPLE_URI, storeDir)).rejects.toThrow(
       /HTTP 404.*Not Found/i
     );
+  });
+});
+
+describe("ldFetch — hash URIs", () => {
+  it("isHashUri is false for a plain URI", async () => {
+    const result = await ldFetch(EXAMPLE_URI, storeDir);
+    expect(result.isHashUri).toBe(false);
+    expect(result.documentUri).toBe(EXAMPLE_URI);
+    expect(result.graphIri).toBe(EXAMPLE_URI);
+  });
+
+  it("isHashUri is true for a hash URI", async () => {
+    const result = await ldFetch(HASH_URI, storeDir);
+    expect(result.isHashUri).toBe(true);
+    expect(result.uri).toBe(HASH_URI);
+    expect(result.documentUri).toBe(EXAMPLE_URI);
+    expect(result.graphIri).toBe(EXAMPLE_URI);
+  });
+
+  it("stores triples under the document URI graph, not the hash URI graph", async () => {
+    await ldFetch(HASH_URI, storeDir);
+
+    const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
+    const oxiStore = openStore(storePath);
+
+    // Triples must be in the document graph
+    const docRows = oxiStore.query(
+      `SELECT ?s WHERE { GRAPH <${EXAMPLE_URI}> { ?s ?p ?o } } LIMIT 1`
+    ) as Map<string, Term>[];
+    expect(docRows.length).toBeGreaterThan(0);
+
+    // The hash URI graph must be empty
+    const hashRows = oxiStore.query(
+      `SELECT ?s WHERE { GRAPH <${HASH_URI}> { ?s ?p ?o } } LIMIT 1`
+    ) as Map<string, Term>[];
+    expect(hashRows).toHaveLength(0);
+  });
+
+  it("fetching hash URI and plain document URI share the same graph (idempotent)", async () => {
+    const resultHash  = await ldFetch(HASH_URI, storeDir);
+    const resultPlain = await ldFetch(EXAMPLE_URI, storeDir);
+
+    expect(resultHash.graphIri).toBe(resultPlain.graphIri);
+    expect(resultHash.tripleCount).toBe(resultPlain.tripleCount);
+  });
+
+  it("mem:meta is indexed by document URI for hash fetches", async () => {
+    await ldFetch(HASH_URI, storeDir);
+
+    const storePath = resolveStorePath(FETCHED_DATA_STORE, storeDir);
+    const oxiStore = openStore(storePath);
+
+    const rows = oxiStore.query(
+      `PREFIX mem: <${MEM_NS}>
+       SELECT ?chunk WHERE {
+         GRAPH <${META_GRAPH}> { ?chunk mem:fetchedFrom <${EXAMPLE_URI}> . }
+       }`
+    ) as Map<string, Term>[];
+    expect(rows).toHaveLength(1);
   });
 });
