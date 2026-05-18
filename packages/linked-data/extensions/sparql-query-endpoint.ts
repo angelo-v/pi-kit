@@ -31,6 +31,7 @@ import {injectWikidataPrefixes, WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES,} from "./l
 import {validateEndpointUrl} from "./lib/validate-endpoint.js";
 import {logQuery} from "./lib/query-logger.js";
 import {skillWasRead} from "./lib/skill-read-guard.js";
+import {cacheEndpointResult} from "./lib/endpoint-cache.js";
 
 // Re-export so consumers can import from a single place if needed.
 export { WIKIDATA_ENDPOINT, WIKIDATA_PREFIXES, injectWikidataPrefixes, validateEndpointUrl };
@@ -132,6 +133,13 @@ export default function (pi: ExtensionAPI) {
         isError,
         cwd: ctx.cwd,
       });
+      if (!isError) {
+        await cacheEndpointResult({
+          query: params.query,
+          endpointUrl: params.endpoint,
+          result: output,
+        });
+      }
       return {
         content: [{ type: "text", text: output }],
         ...(isError ? { isError: true } : {}),
@@ -190,6 +198,13 @@ export default function (pi: ExtensionAPI) {
         isError,
         cwd: ctx.cwd,
       });
+      if (!isError) {
+        await cacheEndpointResult({
+          query: queryWithPrefixes,
+          endpointUrl: WIKIDATA_ENDPOINT,
+          result: output,
+        });
+      }
       return {
         content: [{ type: "text", text: output }],
         ...(isError ? { isError: true } : {}),

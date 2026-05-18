@@ -29,6 +29,8 @@
       --node-iri:      #f59e0b; --node-iri-b:     #b45309;
       --node-graph:    #8b5cf6; --node-graph-b:   #5b21b6;
       --node-blank:    #94a3b8; --node-blank-b:   #475569;
+      --node-query:    #0284c7; --node-query-b:   #075985;
+      --node-result:   #059669; --node-result-b:  #064e3b;
       --node-selected: #f43f5e;
       --edge-color:    #9ca3af;
 
@@ -411,6 +413,80 @@
       margin-bottom: 4px;
       word-break: break-all;
     }
+
+    /* ── Query execution cards (endpoint cache) ── */
+    .query-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-3);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .query-card + .query-card { margin-top: var(--space-3); }
+    .query-card-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: var(--space-2);
+    }
+    .query-card-header wa-icon { font-size: 14px; color: #0ea5e9; flex-shrink: 0; }
+    .query-card-header .query-endpoint {
+      font-size: 11px;
+      font-weight: 700;
+      color: #0ea5e9;
+      word-break: break-all;
+    }
+    .query-card-time {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-2);
+    }
+    .query-card-sparql {
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      line-height: 1.5;
+      color: var(--color-text);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-2) var(--space-3);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 120px;
+      overflow-y: auto;
+      margin-bottom: var(--space-2);
+    }
+    .query-card-result {
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      line-height: 1.4;
+      color: var(--color-text-muted);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      padding: var(--space-2) var(--space-3);
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .query-card-result summary {
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-text);
+      margin-bottom: var(--space-1);
+    }
+    .query-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      background: #0ea5e9;
+      color: #fff;
+      margin-top: var(--space-2);
+    }
   </style>
 </head>
 <body>
@@ -467,6 +543,8 @@
       <div class="legend-item"><div class="legend-dot"  style="background:#94a3b8"></div>Blank</div>
       <div class="legend-item"><div class="legend-dot"  style="background:#d946ef;border-style:dashed"></div>Quoted</div>
       <div class="legend-item"><div class="legend-rect" style="background:#8b5cf6"></div>Graph</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#0284c7"></div>Query</div>
+      <div class="legend-item"><div class="legend-dot"  style="background:#059669;border-style:dashed"></div>Result</div>
     </div>
   </header>
 
@@ -510,6 +588,7 @@
     <div class="panel-tabs" role="tablist">
       <button class="panel-tab active" id="tab-selection" role="tab" aria-selected="true">Selection</button>
       <button class="panel-tab" id="tab-chunks" role="tab" aria-selected="false">Chunks</button>
+      <button class="panel-tab" id="tab-queries" role="tab" aria-selected="false">Queries</button>
     </div>
     <div class="panel-header" style="padding-top:var(--space-2);padding-bottom:var(--space-2)">
       <span id="panel-label" style="font-size:11px">Click a node or edge</span>
@@ -520,6 +599,9 @@
     </div>
     <div class="panel-body hidden" id="panel-body-chunks">
       <chunk-list></chunk-list>
+    </div>
+    <div class="panel-body hidden" id="panel-body-queries">
+      <query-list></query-list>
     </div>
   </aside>
 
@@ -552,6 +634,12 @@
    * storeNodeGraphs.get(storeName) → Map<nodeId, Set<graphIri>>
    */
   const storeNodeGraphs = new Map();
+
+  /**
+   * Per-store cached query executions (from endpoint-cache stores).
+   * storeQueryExecs.get(storeName) → [{endpoint, query, executedAt, result}, …]
+   */
+  const storeQueryExecs = new Map();
 
   // ── N-Quads parser ───────────────────────────────────────────────────
 
@@ -633,10 +721,12 @@
     storeAnnotations.clear();
     storeChunkMeta.clear();
     storeNodeGraphs.clear();
+    storeQueryExecs.clear();
     for (const [name, quads] of storeQuads) {
-      const { annotations, chunkMeta } = buildIndexes(quads);
+      const { annotations, chunkMeta, queryExecs } = buildIndexes(quads);
       storeAnnotations.set(name, annotations);
       storeChunkMeta.set(name, chunkMeta);
+      storeQueryExecs.set(name, queryExecs);
     }
     for (const name of [...storeQuads.keys()].sort()) {
       const opt = document.createElement('wa-option');
@@ -658,6 +748,19 @@
   const MEM_RECORDED   = 'urn:pi-kit:linked-data:rdf-memory:recordedAt';
   const DCT_SUBJECT    = 'http://purl.org/dc/terms/subject';
   const MEM_META_G     = 'urn:pi-kit:linked-data:rdf-memory:meta';
+
+  // Endpoint-cache namespace constants
+  const EC_NS           = 'urn:pi-kit:linked-data:endpoint-cache:';
+  const EC_TYPE         = EC_NS + 'QueryExecution';
+  const EC_RESULT_TYPE  = EC_NS + 'QueryResult';
+  const EC_QUERY_TEXT   = EC_NS + 'queryText';   // new: text of the query as a literal on a named node
+  const EC_RESULT_TEXT  = EC_NS + 'resultText';  // new: result text on a named QueryResult node
+  const EC_HAS_RESULT   = EC_NS + 'hasResult';   // new: edge from QueryExecution → QueryResult
+  const EC_ENDPOINT     = EC_NS + 'endpoint';
+  const EC_EXECUTED_AT  = EC_NS + 'executedAt';
+  // Legacy flat property names kept for backward compat in Queries tab
+  const EC_QUERY_LEGACY  = EC_NS + 'query';
+  const EC_RESULT_LEGACY = EC_NS + 'result';
 
   function quotedKey(qt) {
     return `${qt.subject.value}|${qt.predicate.value}|${qt.object.value}`;
@@ -712,7 +815,55 @@
       if (q.predicate.value === DCT_SUBJECT)   rec.topic      = q.object.value;
     }
 
-    return { annotations, chunkMeta };
+    // Step 4: endpoint-cache query execution records
+    // Supports both the old flat blank-node model and the new named-node model.
+    const queryExecs = [];
+    const ecSubjects = new Map(); // subjectId → { endpoint?, query?, executedAt?, result? }
+
+    // Pass A: collect execution properties from #queries graphs
+    for (const q of quads) {
+      const g = q.graph?.value;
+      if (!g || !g.endsWith('#queries')) continue;
+      const sk = q.subject.value;
+      if (!ecSubjects.has(sk)) ecSubjects.set(sk, {});
+      const rec = ecSubjects.get(sk);
+      if (q.predicate.value === RDF_TYPE && q.object.value === EC_TYPE) rec.isExec = true;
+      // New named-node model
+      if (q.predicate.value === EC_QUERY_TEXT)    rec.query      = q.object.value;
+      if (q.predicate.value === EC_ENDPOINT)       rec.endpoint   = q.object.termType === 'NamedNode' ? q.object.value : q.object.value;
+      if (q.predicate.value === EC_EXECUTED_AT)    rec.executedAt = q.object.value;
+      // Old flat model (legacy backward compat)
+      if (q.predicate.value === EC_QUERY_LEGACY)   rec.query      = rec.query  ?? q.object.value;
+      if (q.predicate.value === EC_RESULT_LEGACY)  rec.result     = rec.result ?? q.object.value;
+    }
+    // Pass B: collect result text from QueryResult nodes (new model)
+    const resultTextMap = new Map(); // resultIRI → text
+    for (const q of quads) {
+      const g = q.graph?.value;
+      if (!g || !g.endsWith('#queries')) continue;
+      if (q.predicate.value === EC_RESULT_TEXT) resultTextMap.set(q.subject.value, q.object.value);
+    }
+    // Pass C: link ec:hasResult → resultText
+    for (const q of quads) {
+      const g = q.graph?.value;
+      if (!g || !g.endsWith('#queries')) continue;
+      if (q.predicate.value === EC_HAS_RESULT) {
+        const execRec = ecSubjects.get(q.subject.value);
+        if (execRec) execRec.result = execRec.result ?? resultTextMap.get(q.object.value);
+      }
+    }
+    for (const rec of ecSubjects.values()) {
+      if (rec.isExec) {
+        queryExecs.push({
+          endpoint:   rec.endpoint   ?? null,
+          query:      rec.query      ?? null,
+          executedAt: rec.executedAt ?? null,
+          result:     rec.result     ?? null,
+        });
+      }
+    }
+
+    return { annotations, chunkMeta, queryExecs };
   }
 
   // ── Prefix shortener ─────────────────────────────────────────────────
@@ -725,6 +876,7 @@
     ['https://www.w3.org/ns/solid/terms#',           'solid:'],
     ['http://xmlns.com/foaf/0.1/',                   'foaf:'],
     ['urn:pi-kit:linked-data:rdf-memory:',           'mem:'],
+    ['urn:pi-kit:linked-data:endpoint-cache:',       'ec:'],
     ['http://www.w3.org/ns/prov#',                   'prov:'],
     ['https://w3id.org/security#',                   'sec:'],
   ];
@@ -750,12 +902,17 @@
     [`${SCHEMA}Place`]:        'place',
   };
 
-  // Suppress internal mem: annotation predicates from the visual graph
+  // Suppress internal mem: annotation predicates from the visual graph.
+  // Legacy flat endpoint-cache literal predicates are suppressed;
+  // the new named-node model uses EC_HAS_RESULT / EC_QUERY_TEXT / EC_RESULT_TEXT
+  // which are NOT suppressed so QueryExecution → QueryResult edges appear.
   const SUPPRESS_PREDICATES = new Set([
     `${MEM}confidence`,
     `${MEM}source`,
     `${MEM}recordedAt`,
     `http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies`,
+    EC_QUERY_LEGACY,
+    EC_RESULT_LEGACY,
   ]);
 
   // Meta graph IRI — don't render its triples as data edges
@@ -773,6 +930,14 @@
       }
     }
 
+    // Collect endpoint-cache type IRIs for distinct visual styling
+    const queryExecIds   = new Set();
+    const queryResultIds = new Set();
+    for (const [subj, type] of Object.entries(typeMap)) {
+      if (type === EC_TYPE)        queryExecIds.add(subj);
+      if (type === EC_RESULT_TYPE) queryResultIds.add(subj);
+    }
+
     const nodes     = new Map();  // nodeId → data
     const edges     = [];
     const graphIds  = new Set();
@@ -780,6 +945,8 @@
     let   edgeIdx   = 0;
 
     function groupForSubject(iri) {
+      if (queryExecIds.has(iri))   return 'query';
+      if (queryResultIds.has(iri)) return 'result';
       const t = typeMap[iri];
       return t ? (TYPE_GROUP[t] ?? 'iri') : 'iri';
     }
@@ -806,7 +973,15 @@
       if (nodes.has(id)) return id;
 
       if (term.termType === 'BlankNode') {
-        nodes.set(id, { id, label: `_:${term.value.slice(0,8)}`, nodeType: 'blank', group: 'blank', fullVal: term.value });
+        // Blank nodes that are typed as QueryExecution/QueryResult get distinct nodes
+        const bv = term.value;
+        if (queryExecIds.has(bv)) {
+          nodes.set(id, { id, label: 'QueryExecution', nodeType: 'iri', group: 'query', fullVal: bv, fullIri: bv });
+        } else if (queryResultIds.has(bv)) {
+          nodes.set(id, { id, label: 'QueryResult', nodeType: 'iri', group: 'result', fullVal: bv, fullIri: bv });
+        } else {
+          nodes.set(id, { id, label: `_:${term.value.slice(0,8)}`, nodeType: 'blank', group: 'blank', fullVal: term.value });
+        }
       } else if (term.termType === 'Literal') {
         const raw = term.value;
         nodes.set(id, { id, label: raw.length > 30 ? raw.slice(0,28)+'…' : raw, fullVal: raw, datatype: term.datatype?.value, nodeType: 'literal', group: 'literal' });
@@ -820,7 +995,11 @@
         });
       } else {
         const iri = term.value;
-        nodes.set(id, { id, label: shorten(iri), fullIri: iri, nodeType: 'iri', group: groupForSubject(iri) });
+        const g   = groupForSubject(iri);
+        let label = shorten(iri);
+        if (g === 'query')  label = 'QueryExecution';
+        if (g === 'result') label = 'QueryResult';
+        nodes.set(id, { id, label, fullIri: iri, nodeType: 'iri', group: g });
       }
       return id;
     }
@@ -842,6 +1021,10 @@
 
       // Skip the meta graph's bookkeeping triples from visual rendering
       if (gIri === META_GRAPH) continue;
+
+      // #queries graphs ARE rendered (they contain QueryExecution / QueryResult nodes).
+      // Only skip the rdf:type assertion — type is already reflected in the node colour.
+      if (gIri && gIri.endsWith('#queries') && q.predicate.value === RDF_TYPE) continue;
 
       // Skip mem: annotation predicates (RDF-star reification noise)
       if (SUPPRESS_PREDICATES.has(q.predicate.value)) continue;
@@ -915,6 +1098,8 @@
     { selector: 'node[group="org"]',     style: { 'background-color': v('--node-org'),     'border-color': v('--node-org-b'),     'shape': 'ellipse', 'height': 36 } },
     { selector: 'node[group="literal"]', style: { 'background-color': v('--node-literal'), 'border-color': v('--node-literal-b'), 'border-style': 'dashed', 'font-size': 10, 'height': 26 } },
     { selector: 'node[group="blank"]',   style: { 'background-color': v('--node-blank'),   'border-color': v('--node-blank-b'),   'shape': 'diamond', 'height': 30 } },
+    { selector: 'node[group="query"]',   style: { 'background-color': v('--node-query'),   'border-color': v('--node-query-b'),   'shape': 'round-rectangle', 'height': 40, 'font-size': 12, 'font-weight': 700 } },
+    { selector: 'node[group="result"]',  style: { 'background-color': v('--node-result'),  'border-color': v('--node-result-b'),  'shape': 'round-rectangle', 'height': 40, 'font-size': 12, 'font-weight': 700, 'border-style': 'dashed' } },
     { selector: 'node[group="quoted"]',  style: { 'background-color': '#d946ef', 'border-color': '#86198f', 'border-style': 'dashed', 'border-width': 2, 'shape': 'round-rectangle', 'font-size': 9, 'color': '#fff', 'text-wrap': 'wrap', 'text-max-width': 110, 'width': 'label', 'height': 'label', 'padding': 8 } },
     { selector: 'node[group="graph"]',   style: { 'background-color': v('--node-graph'),   'border-color': v('--node-graph-b'),   'shape': 'rectangle', 'height': 38, 'font-size': 12, 'font-weight': 700 } },
     { selector: 'node:selected',         style: { 'background-color': v('--node-selected'), 'border-color': '#9f1239', 'color': '#fff' } },
@@ -988,6 +1173,15 @@
     document.getElementById('loading').classList.add('hidden');
     detail.clear();
     document.querySelector('chunk-list').refresh();
+    document.querySelector('query-list').refresh();
+
+    // If the graph canvas is empty but there are cached queries, auto-switch
+    // to the Queries tab so the user immediately sees the content.
+    const qExecs = storeQueryExecs.get(currentStore) ?? [];
+    if (cy.nodes().length === 0 && qExecs.length > 0) {
+      switchTab('queries');
+    }
+
     // re-apply any active search after graph is rebuilt
     const searchEl = document.getElementById('node-search');
     if (searchEl) applySearch(searchEl.value ?? '');
@@ -1042,6 +1236,7 @@
   function currentAnnotations() { return storeAnnotations.get(currentStore) ?? new Map(); }
   function currentChunkMeta()   { return storeChunkMeta.get(currentStore)   ?? new Map(); }
   function currentNodeGraphs()  { return storeNodeGraphs.get(currentStore)  ?? new Map(); }
+  function currentQueryExecs()  { return storeQueryExecs.get(currentStore)  ?? []; }
 
   /** Chunk meta objects for a node (via nodeGraphs index). */
   function chunksForNode(nodeId) {
@@ -1125,14 +1320,21 @@
         const graphs  = new Set(quads.map(q => q.graph?.value).filter(Boolean)).size;
         const nodes  = cy.nodes().length;
         const edges  = cy.edges().length;
+        const qExecs = currentQueryExecs();
+        const queryCountHtml = qExecs.length > 0
+          ? `<div class="stat-card"><div class="num">${qExecs.length}</div><div class="lbl">Cached queries</div></div>` : '';
         this.innerHTML = `
           <div class="stats-bar">
             <div class="stat-card"><div class="num">${nodes}</div><div class="lbl">Nodes</div></div>
             <div class="stat-card"><div class="num">${edges}</div><div class="lbl">Edges</div></div>
             <div class="stat-card"><div class="num">${quads.length}</div><div class="lbl">Quads</div></div>
             <div class="stat-card"><div class="num">${graphs}</div><div class="lbl">Graphs</div></div>
+            ${queryCountHtml}
           </div>
-          <p class="detail-empty">Click a node or edge to inspect it.</p>`;
+          ${nodes === 0 && qExecs.length > 0
+            ? `<p class="detail-empty">This is an endpoint query cache store.<br>Switch to the <strong>Queries</strong> tab to browse cached SPARQL results.</p>`
+            : `<p class="detail-empty">Click a node or edge to inspect it.</p>`
+          }`;
         return;
       }
 
@@ -1140,7 +1342,8 @@
       const isEdge = this.#el.isEdge();
       const color  = this.#typeColor(d.group);
       const TYPE_LABELS = { person:'Person', org:'Organisation', literal:'Literal',
-                            iri:'IRI', graph:'Named Graph', blank:'Blank Node', quoted:'Quoted Triple (RDF-star)' };
+                            iri:'IRI', graph:'Named Graph', blank:'Blank Node', quoted:'Quoted Triple (RDF-star)',
+                            query:'SPARQL Query Execution', result:'SPARQL Query Result' };
 
       if (isEdge) {
         const annot  = annotationForEdge(d);
@@ -1254,6 +1457,63 @@
   }
   customElements.define('chunk-list', ChunkList);
 
+  // ── <query-list> custom element ────────────────────────────────────────
+  class QueryList extends HTMLElement {
+    connectedCallback() { this.refresh(); }
+    refresh() { this.#render(); }
+
+    #render() {
+      const execs = currentQueryExecs();
+      if (!execs || execs.length === 0) {
+        this.innerHTML = `<p class="detail-empty">No cached SPARQL queries found.<br>Endpoint query results are auto-cached when using <code>sparql_query_endpoint</code> or <code>sparql_query_wikidata</code>.</p>`;
+        return;
+      }
+
+      // Sort newest first
+      const sorted = [...execs].sort((a, b) => {
+        const ta = a.executedAt ?? '';
+        const tb = b.executedAt ?? '';
+        return tb.localeCompare(ta);
+      });
+
+      let html = '';
+      for (const exec of sorted) {
+        const date = exec.executedAt ? new Date(exec.executedAt).toLocaleString() : '—';
+        const endpoint = exec.endpoint ?? '—';
+
+        // Strip injected standard prefixes for readability
+        let queryText = exec.query ?? '';
+        queryText = queryText.replace(/^(PREFIX\s+\w+:\s+<[^>]+>\s*\n)+/i, m => {
+          // Keep only non-standard prefixes (collapse well-known ones)
+          const lines = m.trim().split('\n');
+          const kept = lines.filter(l => {
+            const match = l.match(/^PREFIX\s+(\w+):/i);
+            if (!match) return true;
+            const p = match[1].toLowerCase();
+            return !['wd','wdt','wikibase','p','ps','pq','rdfs','schema','skos','owl','xsd','bd','rdf','prefix'].includes(p);
+          });
+          return kept.length ? kept.join('\n') + '\n' : '';
+        });
+
+        const resultHtml = exec.result
+          ? `<details class="query-card-result"><summary>Result</summary>${escHtml(exec.result)}</details>`
+          : '';
+
+        html += `<div class="query-card">
+          <div class="query-card-header">
+            <wa-icon name="database"></wa-icon>
+            <span class="query-endpoint">${escHtml(shorten(endpoint))}</span>
+          </div>
+          <div class="query-card-time">${date}</div>
+          <div class="query-card-sparql">${escHtml(queryText.trim())}</div>
+          ${resultHtml}
+        </div>`;
+      }
+      this.innerHTML = html;
+    }
+  }
+  customElements.define('query-list', QueryList);
+
   const detail = document.querySelector('graph-detail');
   cy.on('select',   'node, edge', e  => {
     detail.show(e.target);
@@ -1262,19 +1522,27 @@
   cy.on('unselect', 'node, edge', () => detail.clear());
 
   // ── Panel tab switching ─────────────────────────────────────────────
+  const TAB_IDS = ['selection', 'chunks', 'queries'];
+  const TAB_LABELS = { selection: 'Click a node or edge', chunks: 'Named graph chunks', queries: 'Cached SPARQL queries' };
+
   function switchTab(tab) {
-    const isSel = tab === 'selection';
-    document.getElementById('tab-selection').classList.toggle('active', isSel);
-    document.getElementById('tab-chunks').classList.toggle('active', !isSel);
-    document.getElementById('panel-body-selection').classList.toggle('hidden', !isSel);
-    document.getElementById('panel-body-chunks').classList.toggle('hidden', isSel);
-    document.getElementById('panel-label').textContent = isSel ? 'Click a node or edge' : 'Named graph chunks';
+    for (const id of TAB_IDS) {
+      const isActive = id === tab;
+      document.getElementById(`tab-${id}`).classList.toggle('active', isActive);
+      document.getElementById(`tab-${id}`).setAttribute('aria-selected', String(isActive));
+      document.getElementById(`panel-body-${id}`).classList.toggle('hidden', !isActive);
+    }
+    document.getElementById('panel-label').textContent = TAB_LABELS[tab] ?? '';
   }
 
   document.getElementById('tab-selection').addEventListener('click', () => switchTab('selection'));
   document.getElementById('tab-chunks').addEventListener('click',    () => {
     switchTab('chunks');
     document.querySelector('chunk-list').refresh();
+  });
+  document.getElementById('tab-queries').addEventListener('click',   () => {
+    switchTab('queries');
+    document.querySelector('query-list').refresh();
   });
 
 

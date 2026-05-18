@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `rdf-memory` skill & tools: persist and query RDF-Star knowledge graphs across sessions
 - `/rdf-memory-explorer` command: browse and inspect persisted RDF memory via a local web UI
+- Auto-cache SPARQL endpoint results: every successful `sparql_query_endpoint` and `sparql_query_wikidata` call is automatically persisted to a per-endpoint RDF memory store
 
 ## 0.6.1
 
