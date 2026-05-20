@@ -520,6 +520,10 @@
       <wa-icon slot="start" name="magnifying-glass"></wa-icon>
     </wa-input>
 
+    <wa-button size="small" variant="neutral" id="btn-focus" title="Focus mode: show only selected node and its neighbors">
+      <wa-icon slot="prefix" name="crosshairs"></wa-icon>Focus
+    </wa-button>
+
     <wa-button size="small" variant="neutral" id="btn-fit">
       <wa-icon slot="prefix" name="expand"></wa-icon>Fit
     </wa-button>
@@ -1134,6 +1138,10 @@
     { selector: '.search-dim',       style: { opacity: 0.12 } },
     { selector: '.search-match',     style: { 'border-width': 3, 'border-color': '#f59e0b', 'border-opacity': 1 } },
     { selector: 'edge.search-match', style: { 'line-color': '#f59e0b', 'target-arrow-color': '#f59e0b', width: 2.5 } },
+
+    // focus mode dim / highlight
+    { selector: '.focus-dim',        style: { opacity: 0.06 } },
+    { selector: '.focus-keep',       style: { opacity: 1 } },
   ];
 
   const cy = cytoscape({
@@ -1324,6 +1332,50 @@
     const searchEl = document.getElementById('node-search');
     if (searchEl) applySearch(searchEl.value ?? '');
   }
+
+  // ── Focus mode ───────────────────────────────────────────────────────
+  let focusMode = false;
+  let focusedNodeId = null;
+
+  /** Apply or clear focus-mode dimming based on the current selection. */
+  function applyFocus() {
+    cy.elements().removeClass('focus-dim focus-keep');
+    if (!focusMode || !focusedNodeId) return;
+
+    const focused = cy.getElementById(focusedNodeId);
+    if (!focused || focused.length === 0) return;
+
+    // Neighbourhood = the node itself + directly connected edges + their other endpoints
+    const neighbourhood = focused
+      .union(focused.connectedEdges())
+      .union(focused.connectedEdges().connectedNodes());
+
+    cy.elements().not(neighbourhood).addClass('focus-dim');
+    neighbourhood.addClass('focus-keep');
+  }
+
+  /** Update the Focus button visual state. */
+  function syncFocusButton() {
+    const btn = document.getElementById('btn-focus');
+    if (focusMode) {
+      btn.setAttribute('variant', 'brand');
+      btn.title = 'Focus mode ON — click to exit';
+    } else {
+      btn.setAttribute('variant', 'neutral');
+      btn.title = 'Focus mode: show only selected node and its neighbors';
+    }
+  }
+
+  document.getElementById('btn-focus').addEventListener('click', () => {
+    focusMode = !focusMode;
+    syncFocusButton();
+    if (!focusMode) {
+      // Clear all focus dimming
+      cy.elements().removeClass('focus-dim focus-keep');
+    } else {
+      applyFocus();
+    }
+  });
 
   // ── Node search ──────────────────────────────────────────────────────
   let _searchTimer = null;
@@ -1669,11 +1721,26 @@
   customElements.define('query-list', QueryList);
 
   const detail = document.querySelector('graph-detail');
-  cy.on('select',   'node, edge', e  => {
+  cy.on('select', 'node, edge', e => {
     detail.show(e.target);
     switchTab('selection');
+    // Track focused node for focus mode (prefer nodes over edges)
+    if (e.target.isNode()) {
+      focusedNodeId = e.target.id();
+    } else {
+      // For edges, focus on the source node
+      focusedNodeId = e.target.data('source');
+    }
+    if (focusMode) applyFocus();
   });
-  cy.on('unselect', 'node, edge', () => detail.clear());
+  cy.on('unselect', 'node, edge', () => {
+    detail.clear();
+    // Only clear focus if nothing else is selected
+    if (cy.elements(':selected').length === 0) {
+      focusedNodeId = null;
+      if (focusMode) cy.elements().removeClass('focus-dim focus-keep');
+    }
+  });
 
   // ── Panel tab switching ─────────────────────────────────────────────
   const TAB_IDS = ['selection', 'chunks', 'queries'];
