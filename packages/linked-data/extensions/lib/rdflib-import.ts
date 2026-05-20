@@ -12,12 +12,37 @@
  * Workaround: resolve rdflib's ESM entry point by path at import time
  * so jiti loads it as ESM rather than resolving the bare "rdflib"
  * specifier to the broken lib/index.js CJS build.
+ *
+ * Additionally, we patch the global Node constant for rdflib's XMLHandler
+ * which uses Node.ELEMENT_NODE but doesn't define Node for Node.js environments.
  */
 
 import { createRequire } from "node:module";
 
 const _req = createRequire(import.meta.url);
 const rdflibEsm = _req.resolve("rdflib").replace("/lib/index.js", "/esm/index.js");
+
+// Patch global Node constant for rdflib's XMLHandler
+// rdflib uses Node.ELEMENT_NODE in fetcher.js but doesn't define Node for Node.js
+// See: docs/bugs/ld-fetch-rdf-xml/rdflib-node-missing-constant.md
+if (typeof globalThis.Node === 'undefined') {
+  // @ts-ignore - We're adding a global for rdflib compatibility
+  globalThis.Node = {
+    ELEMENT_NODE: 1,
+    ATTRIBUTE_NODE: 2,
+    TEXT_NODE: 3,
+    CDATA_SECTION_NODE: 4,
+    ENTITY_REFERENCE_NODE: 5,
+    ENTITY_NODE: 6,
+    PROCESSING_INSTRUCTION_NODE: 7,
+    COMMENT_NODE: 8,
+    DOCUMENT_NODE: 9,
+    DOCUMENT_TYPE_NODE: 10,
+    DOCUMENT_FRAGMENT_NODE: 11,
+    NOTATION_NODE: 12
+  };
+}
+
 const { graph, Fetcher, serialize, parse } = await import(rdflibEsm);
 
 export { graph, Fetcher, serialize, parse };

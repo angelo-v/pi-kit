@@ -10,16 +10,68 @@
  *
  * The HTTP boundary lives entirely inside rdflib's Fetcher._fetch, which is
  * replaceable in tests.
+ *
+ * Note: We work around rdflib bugs with text/xml content type by using
+ * native fetch + parse for RDF/XML documents served as text/xml.
+ * See: docs/bugs/ld-fetch-rdf-xml/
  */
 
 import {type Term} from "oxigraph";
 import {flushStore, openStore, resolveStorePath} from "./oxigraph-store.js";
-import {Fetcher, graph, serialize} from "./rdflib-import.js";
+import {Fetcher, graph, serialize, parse} from "./rdflib-import.js";
 import {CHUNK_BASE, MEM_NS, META_GRAPH, newChunkId, nowIso} from "./rdf-memory-chunks.js";
 
 function getContentType(response: unknown): string {
   const headers = (response as any)?.headers;
   return headers?.get?.("content-type") ?? "application/octet-stream";
+}
+
+/**
+ * Normalize content type by removing charset and other parameters.
+ * Also normalize text/xml to application/rdf+xml for rdflib compatibility.
+ */
+function normalizeContentType(contentType: string): string {
+  // Remove charset and other parameters
+  const baseType = contentType.split(';')[0].trim().toLowerCase();
+  
+  // Normalize text/xml to application/rdf+xml
+  // This works around rdflib's bug where it doesn't recognize text/xml as RDF/XML
+  if (baseType === 'text/xml' || baseType === 'application/xml') {
+    return 'application/rdf+xml';
+  }
+  
+  return baseType;
+}
+
+/**
+ * Custom fetch and parse for RDF/XML documents.
+ * This is a workaround for rdflib's bugs with text/xml content type in Node.js.
+ */
+async function customFetchAndParse(uri: string, documentUri: string, store: any): Promise<{ format: string }> {
+  // Use native fetch to get the document
+  const response = await fetch(uri);
+  
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  const normalizedType = normalizeContentType(contentType);
+  const responseText = await response.text();
+  
+  // Parse based on the normalized content type
+  try {
+    parse(responseText, store, documentUri, normalizedType);
+  } catch (err: any) {
+    // If parsing fails, try with application/rdf+xml explicitly
+    if (normalizedType !== 'application/rdf+xml' && contentType.includes('xml')) {
+      parse(responseText, store, documentUri, 'application/rdf+xml');
+    } else {
+      throw err;
+    }
+  }
+  
+  return { format: contentType };
 }
 
 export const FETCHED_DATA_STORE = "fetched-data";
@@ -70,10 +122,42 @@ export async function ldFetch(uri: string, storeDir: string): Promise<FetchResul
   // 1. Fetch + parse via rdflib (imported via ./rdflib-import.ts — see that
   // module for an explanation of why it exists).
   const store = graph();
-  const fetcher = new Fetcher(store, {});
-  const response = await fetcher.load(uri);
-
-  const format = getContentType(response);
+  
+  // Workaround for rdflib bug with text/xml content type:
+  // rdflib's XMLHandler has bugs that prevent it from parsing RDF/XML served as text/xml
+  // in Node.js environments. We use native fetch + parse as a workaround.
+  // See: docs/bugs/ld-fetch-rdf-xml/ld-fetch-a4g-workaround.md
+  let response: any;
+  let format: string;
+  
+  try {
+    // Try using rdflib's Fetcher first (it handles content negotiation, redirects, etc.)
+    const fetcher = new Fetcher(store, {});
+    response = await fetcher.load(uri);
+    format = getContentType(response);
+    
+    // If we got text/xml or application/xml, rdflib might have failed to parse it
+    // Check if any triples were parsed
+    const initialTripleCount = store.statements.filter((st: any) => st.graph.value === documentUri).length;
+    
+    // If no triples were parsed and the content type is XML, try our workaround
+    if (initialTripleCount === 0 && (format.includes('xml') || format.includes('text/xml'))) {
+      // Clear the store and try our custom fetch
+      store.statements = [];
+      response = await customFetchAndParse(uri, documentUri, store);
+      format = response.format;
+    }
+  } catch (err: any) {
+    // If rdflib fails, try our custom fetch as fallback
+    if (err.message.includes('Node is not defined') || 
+        err.message.includes('Unsupported dialect of XML') ||
+        err.message.includes("Don't know how to parse")) {
+      response = await customFetchAndParse(uri, documentUri, store);
+      format = response.format;
+    } else {
+      throw err;
+    }
+  }
 
   // 2. Collect only the quads that belong to the document graph.
   //    rdflib stores the parsed triples under the document URI (no fragment).
