@@ -6,7 +6,7 @@
  */
 
 import { vi, describe, it, expect } from "vitest";
-import { querySkosConcepts, conceptMention, type SkosConcept } from "../skos-concepts.js";
+import { querySkosConcepts, conceptMention, formatConceptContext, type SkosConcept } from "../skos-concepts.js";
 import type { QueryEngine } from "@comunica/query-sparql-file";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -105,6 +105,64 @@ describe("querySkosConcepts", () => {
 
     const concepts = await querySkosConcepts(["/data/vocab.ttl"], engine);
     expect(concepts[0]!.broader).toBe("http://example.org/concept/SemanticWeb");
+  });
+});
+
+// ── formatConceptContext ──────────────────────────────────────────────────────
+
+describe("formatConceptContext", () => {
+  it("includes the mention token and IRI", () => {
+    const concept: SkosConcept = {
+      iri: "http://example.org/concept/SemanticWeb",
+      label: "Semantic Web",
+      altLabels: [],
+    };
+    const out = formatConceptContext(concept);
+    expect(out).toContain("#SemanticWeb");
+    expect(out).toContain("<http://example.org/concept/SemanticWeb>");
+  });
+
+  it("includes definition when present", () => {
+    const concept: SkosConcept = {
+      iri: "http://example.org/concept/SemanticWeb",
+      label: "Semantic Web",
+      altLabels: [],
+      description: "An extension of the Web.",
+    };
+    expect(formatConceptContext(concept)).toContain("An extension of the Web.");
+  });
+
+  it("includes altLabels when present", () => {
+    const concept: SkosConcept = {
+      iri: "http://example.org/concept/AI",
+      label: "Artificial Intelligence",
+      altLabels: ["AI", "Machine Intelligence"],
+    };
+    const out = formatConceptContext(concept);
+    expect(out).toContain("AI");
+    expect(out).toContain("Machine Intelligence");
+  });
+
+  it("includes broader IRI when present", () => {
+    const concept: SkosConcept = {
+      iri: "http://example.org/concept/OWL",
+      label: "OWL",
+      altLabels: [],
+      broader: "http://example.org/concept/SemanticWeb",
+    };
+    expect(formatConceptContext(concept)).toContain("<http://example.org/concept/SemanticWeb>");
+  });
+
+  it("omits optional lines when absent", () => {
+    const concept: SkosConcept = {
+      iri: "http://example.org/concept/OWL",
+      label: "OWL",
+      altLabels: [],
+    };
+    const out = formatConceptContext(concept);
+    expect(out).not.toContain("Definition");
+    expect(out).not.toContain("Also known as");
+    expect(out).not.toContain("Broader");
   });
 });
 

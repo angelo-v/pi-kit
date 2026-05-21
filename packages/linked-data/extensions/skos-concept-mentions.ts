@@ -19,7 +19,7 @@ import {
 } from "@earendil-works/pi-tui";
 
 import { findByExtensions, RDF_EXTENSIONS } from "./lib/find-files.js";
-import { querySkosConcepts, conceptMention, type SkosConcept } from "./lib/skos-concepts.js";
+import { querySkosConcepts, conceptMention, formatConceptContext, type SkosConcept } from "./lib/skos-concepts.js";
 
 const MAX_SUGGESTIONS = 20;
 
@@ -41,11 +41,11 @@ function extractConceptToken(textBeforeCursor: string): string | undefined {
 
 function toItem(concept: SkosConcept): AutocompleteItem {
   const mention = conceptMention(concept);
-  const desc = [concept.description, concept.altLabels.join(", ")].filter(Boolean).join(" · ");
+  const desc = [concept.description, concept.altLabels.join(", "), concept.iri].filter(Boolean).join(" · ");
   return {
     value: mention,
-    label: mention,
-    description: desc || concept.iri,
+    label: concept.label,
+    description: desc,
   };
 }
 
@@ -67,7 +67,8 @@ function filterConcepts(concepts: SkosConcept[], query: string): AutocompleteIte
 
 function createConceptProvider(
   current: AutocompleteProvider,
-  getConcepts: () => Promise<SkosConcept[] | undefined>
+  getConcepts: () => Promise<SkosConcept[] | undefined>,
+  onConceptSelected: (concept: SkosConcept) => void,
 ): AutocompleteProvider {
   return {
     async getSuggestions(
@@ -98,6 +99,12 @@ function createConceptProvider(
     },
 
     applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+      // item.value is the mention token (e.g. "#SemanticWeb") — look up the
+      // concept synchronously from the already-resolved cache and stash it.
+      void getConcepts().then((concepts) => {
+        const match = concepts?.find((c) => conceptMention(c) === item.value);
+        if (match) onConceptSelected(match);
+      });
       return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
     },
 
@@ -113,6 +120,9 @@ export default function (pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     let conceptsPromise: Promise<SkosConcept[] | undefined> | undefined;
     let errorShown = false;
+    // Concepts selected via autocomplete in the current editor buffer.
+    // Cleared after each agent turn so stale mentions don't bleed across prompts.
+    const pendingConcepts = new Map<string, SkosConcept>(); // keyed by IRI
 
     const getConcepts = async (): Promise<SkosConcept[] | undefined> => {
       conceptsPromise ??= (async () => {
@@ -138,7 +148,24 @@ export default function (pi: ExtensionAPI): void {
     void getConcepts();
 
     ctx.ui.addAutocompleteProvider((current) =>
-      createConceptProvider(current, getConcepts)
+      createConceptProvider(current, getConcepts, (concept) => {
+        pendingConcepts.set(concept.iri, concept);
+      })
     );
+
+    pi.on("before_agent_start", async (_event, _ctx) => {
+      if (pendingConcepts.size === 0) return;
+
+      const contexts = [...pendingConcepts.values()].map(formatConceptContext).join("\n\n");
+      pendingConcepts.clear();
+
+      return {
+        message: {
+          customType: "skos-concept-mentions",
+          content: `The following SKOS concepts were mentioned:\n\n${contexts}`,
+          display: true,
+        },
+      };
+    });
   });
 }

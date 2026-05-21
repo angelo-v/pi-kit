@@ -21,19 +21,32 @@ export interface SkosConcept {
   description?: string;
   /** Broader concept IRI, if present. */
   broader?: string;
+  /** Broader concept label, if present. */
+  broaderLabel?: string;
+  /** Narrower concept IRIs. */
+  narrower: string[];
+  /** Narrower concept labels (parallel array to narrower). */
+  narrowerLabels: string[];
 }
 
 const QUERY = `
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 
-SELECT ?concept ?label ?altLabel ?definition ?broader
+SELECT ?concept ?label ?altLabel ?definition ?broader ?broaderLabel ?narrower ?narrowerLabel
 WHERE {
   ?concept a skos:Concept .
-  OPTIONAL { ?concept skos:prefLabel ?label FILTER (LANG(?label) = "en" || LANG(?label) = "") }
-  OPTIONAL { ?concept skos:altLabel ?altLabel FILTER (LANG(?altLabel) = "en" || LANG(?altLabel) = "") }
-  OPTIONAL { ?concept skos:definition ?definition FILTER (LANG(?definition) = "en" || LANG(?definition) = "") }
-  OPTIONAL { ?concept skos:scopeNote ?definition FILTER (LANG(?definition) = "en" || LANG(?definition) = "") }
-  OPTIONAL { ?concept skos:broader ?broader }
+  OPTIONAL { ?concept skos:prefLabel ?label }
+  OPTIONAL { ?concept skos:altLabel ?altLabel }
+  OPTIONAL { ?concept skos:definition ?definition }
+  OPTIONAL { ?concept skos:scopeNote ?definition }
+  OPTIONAL {
+    ?concept skos:broader ?broader .
+    OPTIONAL { ?broader skos:prefLabel ?broaderLabel }
+  }
+  OPTIONAL {
+    ?concept skos:narrower ?narrower .
+    OPTIONAL { ?narrower skos:prefLabel ?narrowerLabel }
+  }
 }
 ORDER BY ?concept ?label
 `;
@@ -66,10 +79,17 @@ export async function querySkosConcepts(
 
   const rows = await bindingsStream.toArray();
 
-  // Group by concept IRI, accumulating altLabels
+  // Group by concept IRI, accumulating altLabels and narrower concepts
   const map = new Map<
     string,
-    { label: string; altLabels: Set<string>; description?: string; broader?: string }
+    {
+      label: string;
+      altLabels: Set<string>;
+      description?: string;
+      broader?: string;
+      broaderLabel?: string;
+      narrower: Map<string, string | undefined>; // IRI → label
+    }
   >();
 
   for (const row of rows) {
@@ -80,9 +100,12 @@ export async function querySkosConcepts(
     const altLabel = row.get("altLabel")?.value;
     const definition = row.get("definition")?.value;
     const broader = row.get("broader")?.value;
+    const broaderLabel = row.get("broaderLabel")?.value;
+    const narrower = row.get("narrower")?.value;
+    const narrowerLabel = row.get("narrowerLabel")?.value;
 
     if (!map.has(iri)) {
-      map.set(iri, { label, altLabels: new Set(), description: definition, broader });
+      map.set(iri, { label, altLabels: new Set(), description: definition, broader, broaderLabel, narrower: new Map() });
     }
 
     const entry = map.get(iri)!;
@@ -92,14 +115,24 @@ export async function querySkosConcepts(
     }
     if (altLabel) entry.altLabels.add(altLabel);
     if (definition && !entry.description) entry.description = definition;
+    if (broader && !entry.broader) {
+      entry.broader = broader;
+      entry.broaderLabel = broaderLabel;
+    }
+    if (narrower && !entry.narrower.has(narrower)) {
+      entry.narrower.set(narrower, narrowerLabel);
+    }
   }
 
-  return Array.from(map.entries()).map(([iri, { label, altLabels, description, broader }]) => ({
+  return Array.from(map.entries()).map(([iri, { label, altLabels, description, broader, broaderLabel, narrower }]) => ({
     iri,
     label,
     altLabels: Array.from(altLabels),
     description,
     broader,
+    broaderLabel,
+    narrower: Array.from(narrower.keys()),
+    narrowerLabels: Array.from(narrower.values()).map((l) => l ?? ""),
   }));
 }
 
@@ -113,4 +146,28 @@ export function conceptMention(concept: SkosConcept): string {
     .replace(/\s+(.)/g, (_, c: string) => c.toUpperCase())
     .replace(/^(.)/, (_, c: string) => c.toUpperCase());
   return `#${mention}`;
+}
+
+/**
+ * Format a concept as a short context block for injection into the LLM prompt.
+ */
+export function formatConceptContext(concept: SkosConcept): string {
+  const lines: string[] = [`${conceptMention(concept)} — <${concept.iri}>`];
+  if (concept.description) lines.push(`  Definition: ${concept.description}`);
+  if (concept.altLabels.length > 0)
+    lines.push(`  Also known as: ${concept.altLabels.join(", ")}`);
+  if (concept.broader) {
+    const broaderDisplay = concept.broaderLabel
+      ? `${concept.broaderLabel} <${concept.broader}>`
+      : `<${concept.broader}>`;
+    lines.push(`  Broader: ${broaderDisplay}`);
+  }
+  if (concept.narrower.length > 0) {
+    const narrowerDisplay = concept.narrower.map((iri, i) => {
+      const lbl = concept.narrowerLabels[i];
+      return lbl ? `${lbl} <${iri}>` : `<${iri}>`;
+    });
+    lines.push(`  Narrower: ${narrowerDisplay.join(", ")}`);
+  }
+  return lines.join("\n");
 }
