@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `skos-concept-mentions` extension — adds `#SomeConcept` autocomplete to the pi editor. Typing `#` triggers fuzzy suggestions drawn from SKOS concepts discovered in local RDF files, mirroring the built-in `@file` mention UX.
+
 - `rdf_schema_overview` tool — returns type and predicate usage counts for an rdf-memory store or a set of local RDF files in one call, so the agent discovers the actual schema before writing any SPARQL query.
 - `ld_fetch` tool — dereferences a Linked Data URI, content-negotiates an RDF representation, parses it with rdflib's Fetcher (Turtle, JSON-LD, RDF/XML, N-Triples, HTML+RDFa), and stores the resulting quads in the Oxigraph `"fetched-data"` store under `GRAPH <uri>`. Re-fetching the same URI replaces the graph atomically.
 - `linked-data-fetch` skill — guides the agent through the fetch → query cycle, re-fetching, metadata inspection, and link-following with `owl:sameAs` / `rdfs:seeAlso`.
