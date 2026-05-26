@@ -24,9 +24,9 @@ export interface SkosConcept {
   /** Broader concept label, if present. */
   broaderLabel?: string;
   /** Narrower concept IRIs. */
-  narrower: string[];
+  narrower?: string[];
   /** Narrower concept labels (parallel array to narrower). */
-  narrowerLabels: string[];
+  narrowerLabels?: string[];
 }
 
 const QUERY = `
@@ -162,9 +162,9 @@ export function formatConceptContext(concept: SkosConcept): string {
       : `<${concept.broader}>`;
     lines.push(`  Broader: ${broaderDisplay}`);
   }
-  if (concept.narrower.length > 0) {
-    const narrowerDisplay = concept.narrower.map((iri, i) => {
-      const lbl = concept.narrowerLabels[i];
+  if ((concept.narrower ?? []).length > 0) {
+    const narrowerDisplay = (concept.narrower ?? []).map((iri, i) => {
+      const lbl = (concept.narrowerLabels ?? [])[i];
       return lbl ? `${lbl} <${iri}>` : `<${iri}>`;
     });
     lines.push(`  Narrower: ${narrowerDisplay.join(", ")}`);
