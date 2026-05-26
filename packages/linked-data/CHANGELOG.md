@@ -5,10 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-- `pi-kit-validate` CLI — run SHACL validation from the command line via `npm run validate` (or `npx pi-kit-validate`). Auto-discovers `*.shacl.ttl` and `*.shapes.ttl` shapes files and RDF data files under the current directory; supports explicit `--shapes` / `--cwd` flags. Exits with code 0 on conformance and 1 on violations.
-
 ### 0.7.0
 
 - `skos-concept-mentions` extension — adds `#SomeConcept` autocomplete to the pi editor. Typing `#` triggers fuzzy suggestions drawn from SKOS concepts discovered in local RDF files, mirroring the built-in `@file` mention UX. Selecting a concept from the list injects its URI and base info into the agent context for the next prompt.
@@ -19,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `rdf-memory` skill & tools: persist and query RDF-Star knowledge graphs across sessions
 - `/rdf-memory-explorer` command: browse and inspect persisted RDF memory via a local web UI
 - Auto-cache SPARQL endpoint results: every successful `sparql_query_endpoint` and `sparql_query_wikidata` call is automatically persisted to a per-endpoint RDF memory store
+- `pi-kit-query` CLI — run SPARQL queries against local RDF files from the command line via `npm run query` (or `npx pi-kit-query`). Auto-discovers `.rq` and `.sparql` files for interactive selection and RDF files under the repository root; supports explicit query and data file arguments, `--format` (table, json, csv, turtle), and `--no-limit`.
+- `pi-kit-validate` CLI — run SHACL validation from the command line via `npm run validate` (or `npx pi-kit-validate`). Auto-discovers `*.shacl.ttl` and `*.shapes.ttl` shapes files and RDF data files under the current directory; supports explicit `--shapes` / `--cwd` flags. Exits with code 0 on conformance and 1 on violations.
 
 ## 0.6.1
 
