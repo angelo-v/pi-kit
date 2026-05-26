@@ -1,6 +1,6 @@
 {
   "name": "@aveltens/pi-kit-linked-data",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Pi Coding Agent skills and extensions to work with RDF, SPARQL and other Linked Data technologies",
   "keywords": [
     "pi-package"
@@ -33,9 +33,6 @@
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
   },
-  "devDependencies": {
-    "tsx": "^4.22.3"
-  },
   "dependencies": {
     "@comunica/query-sparql": "^5.2.2",
     "@comunica/query-sparql-file": "^5.2.2",
@@ -45,7 +42,8 @@
     "oxigraph": "^0.5.8",
     "rdf-validate-shacl": "^0.6.5",
     "rdflib": "^2.3.8",
-    "shacl-engine": "^1.1.0"
+    "shacl-engine": "^1.1.0",
+    "tsx": "^4.22.3"
   },
   "repository": {
     "type": "git",

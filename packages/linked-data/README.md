@@ -83,6 +83,26 @@ Skills guide Pi on when and how to use the tools:
 - **sparql-query-endpoint** — endpoint exploration, output format selection, PREFIX declarations
 - **sparql-query-wikidata** — entity/property model, label service patterns, multi-hop traversal
 
+## CLI Tools
+
+The package ships two command-line tools you can run directly from your project.
+
+Add convenience `scripts` to your `package.json`:
+
+```json
+{
+  "query": "cd .pi/npm && npx pi-kit-query",
+  "validate": "cd .pi/npm && npx pi-kit-validate"
+}
+```
+
+Then use them like:
+
+```bash
+npm run query
+npm run validate
+```
+
 ## Requirements
 
 - [Pi Coding Agent](https://pi.dev) — any version
