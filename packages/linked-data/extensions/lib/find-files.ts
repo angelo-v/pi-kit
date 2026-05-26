@@ -24,7 +24,7 @@ export const RDF_EXTENSIONS = new Set([
 export const QUERY_EXTENSIONS = new Set([".rq", ".sparql"]);
 
 /** SHACL shapes files — matched by compound suffix to avoid catching plain .ttl data files. */
-export const SHACL_EXTENSIONS = new Set([".shacl.ttl"]);
+export const SHACL_EXTENSIONS = new Set([".shacl.ttl", ".shape.ttl", ".shapes.ttl"]);
 
 /**
  * Recursively walk `dir`, returning absolute paths of every file for which

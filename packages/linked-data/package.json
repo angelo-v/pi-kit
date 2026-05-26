@@ -12,19 +12,27 @@
     "url": "https://angelo.veltens.org/profile/card#me"
   },
   "type": "module",
+  "bin": {
+    "pi-kit-validate": "bin/validate.js"
+  },
   "files": [
+    "bin",
     "extensions/**/*.ts",
     "!extensions/**/__tests__",
     "skills",
     "tools"
   ],
   "scripts": {
-    "test": "vitest"
+    "test": "vitest",
+    "validate": "node bin/validate.js"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.3"
   },
   "dependencies": {
     "@comunica/query-sparql": "^5.2.2",

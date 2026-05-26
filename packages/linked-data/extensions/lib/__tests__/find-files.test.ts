@@ -8,7 +8,7 @@
 
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { readdirSync, statSync } from "node:fs";
-import { findByExtensions, RDF_EXTENSIONS, QUERY_EXTENSIONS, IGNORE_DIRS } from "../find-files.js";
+import { findByExtensions, findByFullSuffix, RDF_EXTENSIONS, QUERY_EXTENSIONS, SHACL_EXTENSIONS, IGNORE_DIRS } from "../find-files.js";
 
 vi.mock("node:fs", () => ({
   readdirSync: vi.fn(),
@@ -149,6 +149,65 @@ describe("RDF_EXTENSIONS", () => {
 describe("QUERY_EXTENSIONS", () => {
   it("contains .rq",     () => expect(QUERY_EXTENSIONS.has(".rq")).toBe(true));
   it("contains .sparql", () => expect(QUERY_EXTENSIONS.has(".sparql")).toBe(true));
+});
+
+describe("SHACL_EXTENSIONS", () => {
+  it("contains .shacl.ttl",  () => expect(SHACL_EXTENSIONS.has(".shacl.ttl")).toBe(true));
+  it("contains .shape.ttl",   () => expect(SHACL_EXTENSIONS.has(".shape.ttl")).toBe(true));
+  it("contains .shapes.ttl",  () => expect(SHACL_EXTENSIONS.has(".shapes.ttl")).toBe(true));
+});
+
+describe("findByFullSuffix", () => {
+  beforeEach(() => {
+    vi.mocked(readdirSync).mockReset();
+    vi.mocked(statSync).mockReset();
+  });
+
+  it("matches files ending with .shacl.ttl", () => {
+    mockFs({
+      "/root": [
+        { name: "person.shacl.ttl", isDirectory: false },
+        { name: "person.ttl",       isDirectory: false },
+      ],
+    });
+    expect(findByFullSuffix("/root", SHACL_EXTENSIONS)).toEqual(["/root/person.shacl.ttl"]);
+  });
+
+  it("matches files ending with .shapes.ttl", () => {
+    mockFs({
+      "/root": [
+        { name: "person.shapes.ttl", isDirectory: false },
+        { name: "person.ttl",        isDirectory: false },
+      ],
+    });
+    expect(findByFullSuffix("/root", SHACL_EXTENSIONS)).toEqual(["/root/person.shapes.ttl"]);
+  });
+
+  it("matches files ending with .shape.ttl", () => {
+    mockFs({
+      "/root": [
+        { name: "person.shape.ttl", isDirectory: false },
+        { name: "person.ttl",       isDirectory: false },
+      ],
+    });
+    expect(findByFullSuffix("/root", SHACL_EXTENSIONS)).toEqual(["/root/person.shape.ttl"]);
+  });
+
+  it("matches all three suffixes in the same directory", () => {
+    mockFs({
+      "/root": [
+        { name: "a.shacl.ttl",  isDirectory: false },
+        { name: "b.shape.ttl",  isDirectory: false },
+        { name: "c.shapes.ttl", isDirectory: false },
+        { name: "d.ttl",        isDirectory: false },
+      ],
+    });
+    const results = findByFullSuffix("/root", SHACL_EXTENSIONS);
+    expect(results).toContain("/root/a.shacl.ttl");
+    expect(results).toContain("/root/b.shape.ttl");
+    expect(results).toContain("/root/c.shapes.ttl");
+    expect(results).toHaveLength(3);
+  });
 });
 
 describe("IGNORE_DIRS", () => {
