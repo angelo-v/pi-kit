@@ -4,7 +4,17 @@
  */
 
 import { readdirSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+
+/** Returns the git repository root, or falls back to `cwd` when not in a git repo. */
+export function gitRoot(cwd: string): string {
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" }).trim();
+  } catch {
+    return cwd;
+  }
+}
 
 /** Directories that are never descended into. */
 export const IGNORE_DIRS = new Set(["node_modules", ".git", ".pi", ".agents"]);

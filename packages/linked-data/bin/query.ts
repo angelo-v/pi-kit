@@ -23,10 +23,9 @@
 
 import { resolve, isAbsolute, extname, relative } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { search } from "@inquirer/prompts";
 import { findBinary } from "../extensions/lib/find-binary.js";
-import { findByExtensions, RDF_EXTENSIONS, QUERY_EXTENSIONS } from "../extensions/lib/find-files.js";
+import { findByExtensions, gitRoot, RDF_EXTENSIONS, QUERY_EXTENSIONS } from "../extensions/lib/find-files.js";
 import { resolveSources } from "../extensions/lib/resolve-sources.js";
 import { buildArgs, type OutputFormat } from "../extensions/lib/format.js";
 import { ensureLimit } from "../extensions/lib/limit-query.js";
@@ -116,15 +115,6 @@ function parseArgs(argv: string[]): {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Returns the git repository root, or falls back to cwd. */
-function gitRoot(cwd: string): string {
-  try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" }).trim();
-  } catch {
-    return cwd;
-  }
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 

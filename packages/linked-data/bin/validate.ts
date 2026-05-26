@@ -8,7 +8,7 @@
  * Options:
  *   --shapes <file>   Add a shapes file (repeatable). Defaults to auto-discovery
  *                     of *.shacl.ttl under the current working directory.
- *   --cwd <dir>       Root directory for file discovery (default: process.cwd()).
+ *   --cwd <dir>       Root directory for file discovery (default: git repo root, or cwd).
  *   --help, -h        Print this help message.
  *
  * When no data files are given, all RDF files (*.ttl, *.rdf, *.n3, *.jsonld,
@@ -25,6 +25,7 @@ import { existsSync } from "node:fs";
 import {
   findByExtensions,
   findByFullSuffix,
+  gitRoot,
   RDF_EXTENSIONS,
   SHACL_EXTENSIONS,
 } from "../extensions/lib/find-files.js";
@@ -44,7 +45,7 @@ Validates RDF data files against SHACL shapes.
 Options:
   --shapes <file>   Path to a SHACL shapes file (repeatable).
                     Default: auto-discover *.shacl.ttl under --cwd.
-  --cwd <dir>       Root for file discovery (default: current working directory).
+  --cwd <dir>       Root for file discovery (default: git repo root, or current working directory).
   --help, -h        Print this help and exit.
 
 When no data-files are given, all RDF files under --cwd are validated
@@ -65,7 +66,7 @@ function parseArgs(argv: string[]): {
 } {
   const args = argv.slice(2); // strip "node" + script name
   const cwd = process.cwd();
-  let rootDir = cwd;
+  let rootDir = gitRoot(cwd);
   const dataFiles: string[] = [];
   const shapesFiles: string[] = [];
   let help = false;
