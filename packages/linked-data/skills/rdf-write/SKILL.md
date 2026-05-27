@@ -72,3 +72,17 @@ Override with the `format` parameter when extension and desired format differ.
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix void:    <http://rdfs.org/ns/void#> .
 ```
+
+## Patching vs. Rewriting
+
+When you only need to add, remove, or replace a few triples in an **existing** `.ttl` file, prefer `rdf_patch` over `rdf_write`:
+
+| Situation | Tool |
+|---|---|
+| Creating a new RDF file | `rdf_write` |
+| Overwriting a file completely | `rdf_write` |
+| Adding a few triples to an existing file | `rdf_patch` |
+| Removing specific triples from an existing file | `rdf_patch` |
+| Replacing a property value | `rdf_patch` |
+
+`rdf_patch` accepts a SPARQL Update statement and rewrites only the changed triples.
