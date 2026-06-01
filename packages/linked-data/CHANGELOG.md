@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.1
+
+### Fixed
+
+- `rdf_validate` / `applyN3Rules`: N3 rules files were parsed without a `baseIRI`, causing relative URIs (e.g. `</vocab.ttl#Foo>`) to remain as bare path strings instead of resolving to `file://` IRIs. Rule antecedents never matched any data triple, making inference a no-op. Each rules file is now parsed with `baseIRI = pathToFileURL(filePath).href`, consistent with how Turtle data files have always been parsed.
+
 ## 0.9.0
 
 ### Changed

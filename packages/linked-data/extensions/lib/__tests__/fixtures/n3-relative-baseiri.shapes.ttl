@@ -1,0 +1,12 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix :     </types.ttl#> .
+
+:FoodShape
+  a sh:NodeShape ;
+  sh:targetClass :Food ;
+  sh:property [
+    sh:path rdfs:label ;
+    sh:minCount 1 ;
+    sh:message "Every Food must have an rdfs:label." ;
+  ] .

@@ -223,6 +223,44 @@ describe("integration: N3 rules", () => {
   });
 });
 
+// ── N3 rules: relative URI / baseIRI regression ─────────────────────────────
+
+describe("integration: N3 rules with relative URIs (baseIRI regression)", () => {
+  // Fixtures use a relative prefix </types.ttl#> in both the rules and data
+  // files. Without baseIRI on the N3 parser the prefix expands to a bare
+  // path string instead of a file:// IRI, so the rule antecedent never
+  // matches any data triple and inference is a no-op.
+
+  it("reports a violation when a rule using relative URIs infers a class whose instance lacks a required property", async () => {
+    // n3-relative-baseiri.rules.n3 : { ?x a :Fruit } => { ?x a :Food }
+    // n3-relative-baseiri.data.ttl : item1 a :Fruit  (no rdfs:label)
+    // n3-relative-baseiri.shapes.ttl: every :Food must have rdfs:label
+    //
+    // Without the fix (no baseIRI on the N3 parser):
+    //   - rule URIs stay as bare path strings → rule never matches → no inference
+    //   - item1 never becomes :Food → no SHACL target → vacuously conforms
+    // With the fix:
+    //   - rule URIs resolve correctly → item1 becomes :Food → violation reported
+    const result = await validateShacl({
+      dataFiles:   [F("n3-relative-baseiri.data.ttl")],
+      shapesFiles: [F("n3-relative-baseiri.shapes.ttl")],
+      rulesFiles:  [F("n3-relative-baseiri.rules.n3")],
+    });
+    expect(result.conforms).toBe(false);
+    expect(result.violations.length).toBeGreaterThan(0);
+  });
+
+  it("violation focus node is the item that was inferred a :Food via the relative-URI rule", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("n3-relative-baseiri.data.ttl")],
+      shapesFiles: [F("n3-relative-baseiri.shapes.ttl")],
+      rulesFiles:  [F("n3-relative-baseiri.rules.n3")],
+    });
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("item1"))).toBe(true);
+  });
+});
+
 // ── sh:sparql constraint ──────────────────────────────────────────────────────
 
 describe("integration: sh:sparql constraint", () => {

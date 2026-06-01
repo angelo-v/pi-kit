@@ -1,0 +1,7 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix :     </types.ttl#> .
+
+# item1 is a :Fruit — after the rule it should also become a :Food.
+# It has no rdfs:label, so FoodShape must report a violation once the rule fires.
+<#item1> a :Fruit .

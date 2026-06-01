@@ -88,21 +88,29 @@ function parseTurtleToDataset(turtle: string, filePath?: string): Iterable<unkno
  * Apply N3 rules to an array of data quads and return the augmented quads.
  * Parsed using the N3 Store/Reasoner from the `n3` package.
  */
-function applyN3Rules(dataQuads: unknown[], ruleStrings: string[]): unknown[] {
-  // Load all rules into a single N3 Store
+function applyN3Rules(
+  dataQuads: unknown[],
+  rules: Array<{ text: string; filePath: string }>
+): unknown[] {
+  // Load all rules into a single N3 Store.
+  // Each rules file is parsed with its own baseIRI so that relative URIs
+  // (e.g. </vocab.ttl#Foo>) expand to the same absolute file:// IRIs that
+  // the Turtle data parser produces — without this the rule antecedents
+  // never match any data triple and inference is a no-op.
   const rulesStore = new Store();
-  for (const ruleText of ruleStrings) {
-    const parser = new Parser({ format: "N3" });
-    const ruleQuads = parser.parse(ruleText);
+  for (const { text, filePath } of rules) {
+    const baseIRI = pathToFileURL(filePath).href;
+    const parser = new Parser({ format: "N3", baseIRI });
+    const ruleQuads = parser.parse(text);
     rulesStore.addQuads(ruleQuads);
   }
-  const rules = getRulesFromDataset(rulesStore);
+  const n3Rules = getRulesFromDataset(rulesStore);
 
   // Load data into an N3 Store and apply reasoning
   const dataStore = new Store();
   dataStore.addQuads(dataQuads as Parameters<typeof dataStore.addQuads>[0]);
   const reasoner = new Reasoner(dataStore);
-  reasoner.reason(rules);
+  reasoner.reason(n3Rules);
 
   // Return all quads (original + inferred)
   return [...dataStore] as unknown[];
@@ -151,7 +159,10 @@ export async function validateShacl(
     const ruleStrings = await Promise.all(
       options.rulesFiles.map((f) => fs.readFile(f, "utf8"))
     );
-    dataQuads = applyN3Rules(dataQuads, ruleStrings);
+    dataQuads = applyN3Rules(
+      dataQuads,
+      ruleStrings.map((text, i) => ({ text, filePath: options.rulesFiles![i] }))
+    );
   }
 
   const dataDataset = (rdfDataset as { dataset(): unknown }).dataset() as
