@@ -26,8 +26,9 @@ import {
   findByExtensions,
   findByFullSuffix,
   gitRoot,
-  RDF_EXTENSIONS,
+  VALIDATE_DATA_EXTENSIONS,
   SHACL_EXTENSIONS,
+  N3_RULES_EXTENSIONS,
 } from "../extensions/lib/find-files.js";
 import {
   validateShacl,
@@ -45,11 +46,14 @@ Validates RDF data files against SHACL shapes.
 Options:
   --shapes <file>   Path to a SHACL shapes file (repeatable).
                     Default: auto-discover *.shacl.ttl under --cwd.
+  --rules <file>    Path to an N3 rules file (repeatable).
+                    Default: auto-discover *.rules.n3 under --cwd.
+                    Pass --rules '' to disable auto-discovery.
   --cwd <dir>       Root for file discovery (default: git repo root, or current working directory).
   --help, -h        Print this help and exit.
 
 When no data-files are given, all RDF files under --cwd are validated
-(*.ttl, *.rdf, *.n3, *.jsonld, *.trig, *.nq, *.nt), excluding shapes files.
+(*.ttl, *.rdf, *.jsonld, *.trig, *.nq, *.nt), excluding shapes files.
 
 Exit codes:
   0  validation passed
@@ -62,6 +66,7 @@ function parseArgs(argv: string[]): {
   cwd: string;
   dataFiles: string[];
   shapesFiles: string[];
+  rulesFiles: string[];
   help: boolean;
 } {
   const args = argv.slice(2); // strip "node" + script name
@@ -69,6 +74,7 @@ function parseArgs(argv: string[]): {
   let rootDir = gitRoot(cwd);
   const dataFiles: string[] = [];
   const shapesFiles: string[] = [];
+  const rulesFiles: string[] = [];
   let help = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -83,6 +89,10 @@ function parseArgs(argv: string[]): {
       const next = args[++i];
       if (!next) { console.error("--shapes requires a file argument"); process.exit(2); }
       shapesFiles.push(isAbsolute(next) ? next : resolve(cwd, next));
+    } else if (a === "--rules") {
+      const next = args[++i];
+      if (next === undefined) { console.error("--rules requires a file argument"); process.exit(2); }
+      if (next !== "") rulesFiles.push(isAbsolute(next) ? next : resolve(cwd, next));
     } else if (a.startsWith("--")) {
       console.error(`Unknown option: ${a}`);
       process.exit(2);
@@ -91,13 +101,13 @@ function parseArgs(argv: string[]): {
     }
   }
 
-  return { cwd: rootDir, dataFiles, shapesFiles, help };
+  return { cwd: rootDir, dataFiles, shapesFiles, rulesFiles, help };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const { cwd, dataFiles: explicitData, shapesFiles: explicitShapes, help } = parseArgs(process.argv);
+  const { cwd, dataFiles: explicitData, shapesFiles: explicitShapes, rulesFiles: explicitRules, help } = parseArgs(process.argv);
 
   if (help) {
     printHelp();
@@ -124,11 +134,29 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── Resolve rules files ──────────────────────────────────────────────
+  let rulesFiles = explicitRules;
+  if (rulesFiles.length === 0) {
+    rulesFiles = findByFullSuffix(cwd, N3_RULES_EXTENSIONS);
+    if (rulesFiles.length > 0) {
+      console.log(`Auto-discovered ${rulesFiles.length} rules file(s):`);
+      rulesFiles.forEach((f) => console.log(`  ${f}`));
+    }
+  }
+
+  // Validate rules files exist
+  for (const f of rulesFiles) {
+    if (!existsSync(f)) {
+      console.error(`Rules file not found: ${f}`);
+      process.exit(2);
+    }
+  }
+
   // ── Resolve data files ───────────────────────────────────────────────
   let dataFiles = explicitData;
   if (dataFiles.length === 0) {
     const shapesSet = new Set(shapesFiles);
-    dataFiles = findByExtensions(cwd, RDF_EXTENSIONS).filter((f) => !shapesSet.has(f));
+    dataFiles = findByExtensions(cwd, VALIDATE_DATA_EXTENSIONS).filter((f) => !shapesSet.has(f));
     if (dataFiles.length === 0) {
       console.error(`No RDF data files found under ${cwd}.`);
       process.exit(2);
@@ -149,7 +177,7 @@ async function main(): Promise<void> {
   console.log("\nRunning SHACL validation…");
   let result;
   try {
-    result = await validateShacl({ dataFiles, shapesFiles });
+    result = await validateShacl({ dataFiles, shapesFiles, rulesFiles });
   } catch (err) {
     console.error("Validation failed with an error:");
     console.error(err instanceof Error ? err.message : String(err));

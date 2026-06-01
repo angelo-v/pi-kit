@@ -1,0 +1,6 @@
+@prefix ex:  <http://example.org/> .
+
+# ex:thing3 is a Widget with no label.
+# After N3 reasoning it becomes an ex:Product,
+# which then violates ProductShape (rdfs:label required).
+ex:thing3 a ex:Widget .

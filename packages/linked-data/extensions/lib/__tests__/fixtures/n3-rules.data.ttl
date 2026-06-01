@@ -1,0 +1,8 @@
+@prefix ex:  <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ex:thing1 is a Widget — after reasoning it must also be a Product.
+ex:thing1 a ex:Widget ; rdfs:label "Widget One" .
+
+# ex:thing2 is already a Product (no rule needed).
+ex:thing2 a ex:Product ; rdfs:label "Product Two" .

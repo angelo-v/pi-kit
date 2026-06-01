@@ -8,7 +8,9 @@
 
 import * as nodeFs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { Parser } from "n3";
+import { Parser, Store } from "n3";
+// @ts-ignore – Reasoner and getRulesFromDataset exist at runtime but lack type declarations in n3 v2
+import { Reasoner, getRulesFromDataset } from "n3";
 // @ts-ignore
 import { Validator } from "shacl-engine";
 // @ts-ignore
@@ -25,6 +27,9 @@ export interface ValidateOptions {
   dataFiles: string[];
   /** Absolute paths to the SHACL shapes files. */
   shapesFiles: string[];
+  /** Optional N3/Notation3 rules files. Triples inferred by the rules are
+   *  merged into the data graph before SHACL validation runs. */
+  rulesFiles?: string[];
 }
 
 export interface ValidationViolation {
@@ -79,6 +84,30 @@ function parseTurtleToDataset(turtle: string, filePath?: string): Iterable<unkno
   return ds;
 }
 
+/**
+ * Apply N3 rules to an array of data quads and return the augmented quads.
+ * Parsed using the N3 Store/Reasoner from the `n3` package.
+ */
+function applyN3Rules(dataQuads: unknown[], ruleStrings: string[]): unknown[] {
+  // Load all rules into a single N3 Store
+  const rulesStore = new Store();
+  for (const ruleText of ruleStrings) {
+    const parser = new Parser({ format: "N3" });
+    const ruleQuads = parser.parse(ruleText);
+    rulesStore.addQuads(ruleQuads);
+  }
+  const rules = getRulesFromDataset(rulesStore);
+
+  // Load data into an N3 Store and apply reasoning
+  const dataStore = new Store();
+  dataStore.addQuads(dataQuads as Parameters<typeof dataStore.addQuads>[0]);
+  const reasoner = new Reasoner(dataStore);
+  reasoner.reason(rules);
+
+  // Return all quads (original + inferred)
+  return [...dataStore] as unknown[];
+}
+
 // ── Core function ─────────────────────────────────────────────────────────────
 
 /**
@@ -112,11 +141,22 @@ export async function validateShacl(
   const dataTurtles = await Promise.all(
     options.dataFiles.map((f) => fs.readFile(f, "utf8"))
   );
+  let dataQuads: unknown[] = [];
+  for (let i = 0; i < dataTurtles.length; i++) {
+    for (const quad of parseTurtleToDataset(dataTurtles[i], options.dataFiles[i])) dataQuads.push(quad);
+  }
+
+  // Apply N3 rules (if any) before validation
+  if (options.rulesFiles && options.rulesFiles.length > 0) {
+    const ruleStrings = await Promise.all(
+      options.rulesFiles.map((f) => fs.readFile(f, "utf8"))
+    );
+    dataQuads = applyN3Rules(dataQuads, ruleStrings);
+  }
+
   const dataDataset = (rdfDataset as { dataset(): unknown }).dataset() as
     Iterable<unknown> & { add(q: unknown): void };
-  for (let i = 0; i < dataTurtles.length; i++) {
-    for (const quad of parseTurtleToDataset(dataTurtles[i], options.dataFiles[i])) dataDataset.add(quad);
-  }
+  for (const quad of dataQuads) dataDataset.add(quad);
 
   // shacl-engine with full SPARQL support
   const validator = new (Validator as new (

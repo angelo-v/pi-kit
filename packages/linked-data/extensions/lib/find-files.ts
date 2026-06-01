@@ -30,11 +30,28 @@ export const RDF_EXTENSIONS = new Set([
   ".nt",
 ]);
 
+/**
+ * RDF data-file extensions used for SHACL validation auto-discovery.
+ * Excludes .n3 because N3 files use rule syntax ("{ } => { }") that is not
+ * valid Turtle and cannot be loaded as plain RDF data.
+ */
+export const VALIDATE_DATA_EXTENSIONS = new Set([
+  ".ttl",
+  ".rdf",
+  ".jsonld",
+  ".trig",
+  ".nq",
+  ".nt",
+]);
+
 /** SPARQL query-file extensions. */
 export const QUERY_EXTENSIONS = new Set([".rq", ".sparql"]);
 
 /** SHACL shapes files — matched by compound suffix to avoid catching plain .ttl data files. */
 export const SHACL_EXTENSIONS = new Set([".shacl.ttl", ".shape.ttl", ".shapes.ttl"]);
+
+/** N3 rules files — matched by compound suffix to distinguish rule files from plain N3 data. */
+export const N3_RULES_EXTENSIONS = new Set([".rules.n3", ".n3rules"]);
 
 /**
  * Recursively walk `dir`, returning absolute paths of every file for which

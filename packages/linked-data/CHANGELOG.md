@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.0
+
+### Changed
+
+- `rdf_validate` / `validateShacl`: optional `rulesFiles` parameter — N3/Notation3 rule files can now be passed to apply forward-chaining inference before SHACL validation runs. Inferred triples are merged into the data graph so shapes that target inferred classes (e.g. via `{ ?x a ex:Widget } => { ?x a ex:Product }`) are evaluated correctly.
+
 ## 0.8.0
 
 ### Added

@@ -172,6 +172,57 @@ describe("integration: relative IRI isolation across files", () => {
   });
 });
 
+// ── N3 rules ─────────────────────────────────────────────────────────────────
+
+describe("integration: N3 rules", () => {
+  it("infers ex:Product from ex:Widget so a Widget-with-label conforms to ProductShape", async () => {
+    // n3-rules.n3: { ?x a ex:Widget } => { ?x a ex:Product }
+    // n3-rules.data.ttl: thing1 is a Widget WITH a label, thing2 is already a Product.
+    // Without rules: ProductShape has only thing2 as a target (thing1 is never a Product).
+    // With rules: thing1 also becomes a Product; since it has a label, result still conforms.
+    // The meaningful assertion is that thing1 is NOT reported as a violation focus node
+    // (it would be if rules ran but the label were missing, which is the next test).
+    const result = await validateShacl({
+      dataFiles:   [F("n3-rules.data.ttl")],
+      shapesFiles: [F("n3-rules.shapes.ttl")],
+      rulesFiles:  [F("n3-rules.rules.n3")],
+    });
+    expect(result.conforms).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("reports a violation when a Widget-turned-Product (via N3 rule) lacks a required label", async () => {
+    // n3-rules-invalid.data.ttl: thing3 is a Widget with NO label.
+    // Without rules: ProductShape has no targets → vacuously conforms.
+    // With rules:    thing3 becomes a Product → violates sh:minCount 1 on rdfs:label.
+    const result = await validateShacl({
+      dataFiles:   [F("n3-rules-invalid.data.ttl")],
+      shapesFiles: [F("n3-rules.shapes.ttl")],
+      rulesFiles:  [F("n3-rules.rules.n3")],
+    });
+    expect(result.conforms).toBe(false);
+    expect(result.violations.length).toBeGreaterThan(0);
+  });
+
+  it("violation focus node is the Widget-turned-Product that lacks a label", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("n3-rules-invalid.data.ttl")],
+      shapesFiles: [F("n3-rules.shapes.ttl")],
+      rulesFiles:  [F("n3-rules.rules.n3")],
+    });
+    const focusNodes = result.violations.map((v) => v.focusNode);
+    expect(focusNodes.some((fn) => fn.includes("thing3"))).toBe(true);
+  });
+
+  it("omitting rulesFiles still works for plain Turtle data with no rules", async () => {
+    const result = await validateShacl({
+      dataFiles:   [F("books.ttl")],
+      shapesFiles: [F("shacl-core.shapes.ttl")],
+    });
+    expect(result.conforms).toBe(true);
+  });
+});
+
 // ── sh:sparql constraint ──────────────────────────────────────────────────────
 
 describe("integration: sh:sparql constraint", () => {
