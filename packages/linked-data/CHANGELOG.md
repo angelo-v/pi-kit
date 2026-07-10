@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ld_fetch` tool now accepts an optional `authorization` parameter. When set, its value is forwarded as the `Authorization` HTTP header, enabling fetches from endpoints that require authentication (e.g. `Bearer <token>` or `Basic <base64>`).
 
+### Fixed
+
+- `rdf_write` / `parseTurtle`: relative URIs (e.g. `</contacts/jane-doe.ttl#this>`) were expanded against an `"undefined"` base because the n3 `Parser` was constructed without a `baseIRI`, leaking the literal string `"undefined"` into IRIs. `parseTurtle` now parses with `baseIRI = "#"`, which sets an empty base root so relative references survive intact. This also fixes `rdf_patch`, which reads source files through the same `parseTurtle`. An explicit `@base` in the source still overrides this.
+
 ## 0.9.1
 
 ### Fixed

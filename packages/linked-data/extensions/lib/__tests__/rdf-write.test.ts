@@ -183,3 +183,36 @@ describe("writeRdf: error handling", () => {
     ).rejects.toThrow("ENOSPC: disk full");
   });
 });
+
+describe("writeRdf: relative URIs", () => {
+  const RELATIVE_TTL = `
+    @prefix schema: <http://schema.org/> .
+    @prefix : <#> .
+
+    :it a schema:Article ;
+        schema:author </contacts/jane-doe.ttl#this> ;
+        schema:about </orgs/acme.ttl#it> ;
+        schema:url <https://example.org/foo> ;
+        schema:name "Test" .
+  `;
+
+  it("preserves relative URIs instead of expanding them against an 'undefined' base", async () => {
+    const fs = makeFakeFs();
+    await writeRdf({ turtle: RELATIVE_TTL, path: "out.ttl", cwd: "/ws" }, fs);
+
+    const [, content] = vi.mocked(fs.writeFile).mock.calls[0] as [string, string];
+
+    // Bug signature: the literal "undefined" base must never leak into IRIs.
+    expect(content).not.toContain("undefined");
+
+    // Relative references must survive as relative IRIs, not be absolutized
+    // against some default base (which would still be wrong per AGENTS.md).
+    expect(content).toContain("contacts/jane-doe.ttl#this");
+    expect(content).not.toMatch(/https?:\/\/[^>]*contacts\/jane-doe\.ttl#this/);
+    expect(content).toContain("orgs/acme.ttl#it");
+    expect(content).not.toMatch(/https?:\/\/[^>]*orgs\/acme\\.ttl#strategy/);
+
+    // Absolute URIs are unaffected (control — already worked before the bug).
+    expect(content).toContain("https://example.org/foo");
+  });
+});
