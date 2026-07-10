@@ -47,9 +47,14 @@ function normalizeContentType(contentType: string): string {
  * Custom fetch and parse for RDF/XML documents.
  * This is a workaround for rdflib's bugs with text/xml content type in Node.js.
  */
-async function customFetchAndParse(uri: string, documentUri: string, store: any): Promise<{ format: string }> {
+async function customFetchAndParse(
+  uri: string,
+  documentUri: string,
+  store: any,
+  extraHeaders?: Record<string, string>,
+): Promise<{ format: string }> {
   // Use native fetch to get the document
-  const response = await fetch(uri);
+  const response = await fetch(uri, { headers: extraHeaders });
   
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -108,10 +113,15 @@ export interface FetchResult {
  * Fetch a Linked Data URI, parse it, and store the quads in the
  * "fetched-data" Oxigraph store under GRAPH <uri>.
  *
- * @param uri      HTTP/HTTPS URI to dereference.
- * @param storeDir Base directory for Oxigraph stores (injected for testability).
+ * @param uri        HTTP/HTTPS URI to dereference.
+ * @param storeDir   Base directory for Oxigraph stores (injected for testability).
+ * @param extraHeaders Optional HTTP headers to add to the request (e.g. Authorization).
  */
-export async function ldFetch(uri: string, storeDir: string): Promise<FetchResult> {
+export async function ldFetch(
+  uri: string,
+  storeDir: string,
+  extraHeaders?: Record<string, string>,
+): Promise<FetchResult> {
   // Separate the document URI (used for HTTP) from any fragment identifier.
   // The RDF data model stores triples under the document URI — the fragment
   // merely identifies a resource *described within* that document.
@@ -132,8 +142,14 @@ export async function ldFetch(uri: string, storeDir: string): Promise<FetchResul
   
   try {
     // Try using rdflib's Fetcher first (it handles content negotiation, redirects, etc.)
-    const fetcher = new Fetcher(store, {});
-    response = await fetcher.load(uri);
+    // Note: headers must be passed to fetcher.load(), not the Fetcher constructor.
+    // The constructor only consumes `fetch`, `timeout`, etc. — it ignores `headers`.
+    const fetcher = new Fetcher(store);
+    const loadOptions: Record<string, any> = {};
+    if (extraHeaders && Object.keys(extraHeaders).length > 0) {
+      loadOptions.headers = extraHeaders;
+    }
+    response = await fetcher.load(uri, loadOptions);
     format = getContentType(response);
     
     // If we got text/xml or application/xml, rdflib might have failed to parse it
@@ -144,7 +160,7 @@ export async function ldFetch(uri: string, storeDir: string): Promise<FetchResul
     if (initialTripleCount === 0 && (format.includes('xml') || format.includes('text/xml'))) {
       // Clear the store and try our custom fetch
       store.statements = [];
-      response = await customFetchAndParse(uri, documentUri, store);
+      response = await customFetchAndParse(uri, documentUri, store, extraHeaders);
       format = response.format;
     }
   } catch (err: any) {
@@ -152,7 +168,7 @@ export async function ldFetch(uri: string, storeDir: string): Promise<FetchResul
     if (err.message.includes('Node is not defined') || 
         err.message.includes('Unsupported dialect of XML') ||
         err.message.includes("Don't know how to parse")) {
-      response = await customFetchAndParse(uri, documentUri, store);
+      response = await customFetchAndParse(uri, documentUri, store, extraHeaders);
       format = response.format;
     } else {
       throw err;

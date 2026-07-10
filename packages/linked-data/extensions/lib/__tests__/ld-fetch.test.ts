@@ -119,4 +119,36 @@ describe("ld_fetch tool execute", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("HTTP 404: Not Found");
   });
+
+  it("forwards the Authorization header when the authorization param is provided", async () => {
+    mockLdFetch.mockResolvedValue(SAMPLE_RESULT);
+    const tool = await buildExtensionUnderTest();
+
+    await tool.execute(
+      "call-3",
+      { uri: SAMPLE_RESULT.uri, authorization: "Bearer secret" },
+      undefined,
+      undefined,
+      { cwd: "/tmp" },
+    );
+
+    expect(mockLdFetch).toHaveBeenCalledWith(
+      SAMPLE_RESULT.uri,
+      expect.any(String),
+      { Authorization: "Bearer secret" },
+    );
+  });
+
+  it("passes undefined headers when authorization param is omitted", async () => {
+    mockLdFetch.mockResolvedValue(SAMPLE_RESULT);
+    const tool = await buildExtensionUnderTest();
+
+    await tool.execute("call-4", { uri: SAMPLE_RESULT.uri }, undefined, undefined, { cwd: "/tmp" });
+
+    expect(mockLdFetch).toHaveBeenCalledWith(
+      SAMPLE_RESULT.uri,
+      expect.any(String),
+      undefined,
+    );
+  });
 });

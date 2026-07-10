@@ -32,6 +32,9 @@ const TURTLE_FIXTURE = `
 /** Swap this out per-test to simulate fetch failures. */
 let mockFetchBehaviour: "success" | "http-error" | "parse-error" = "success";
 
+/** Captures the options passed to the most recent MockFetcher constructor. */
+let lastFetcherOptions: Record<string, any> = {};
+
 vi.mock("../rdflib-import.js", async (importOriginal) => {
   const real = await importOriginal<typeof import("../rdflib-import.js")>();
 
@@ -48,7 +51,8 @@ vi.mock("../rdflib-import.js", async (importOriginal) => {
       this.appNode = store.sym("chrome://TheCurrentSession");
     }
 
-    async load(uri: string) {
+    async load(uri: string, options: Record<string, any> = {}) {
+      lastFetcherOptions = options;
       if (mockFetchBehaviour === "http-error") {
         throw new Error(`HTTP 404: Not Found fetching <${uri}>`);
       }
@@ -90,6 +94,7 @@ let storeDir: string;
 beforeEach(() => {
   storeDir = mkdtempSync(join(tmpdir(), "ld-fetch-test-"));
   mockFetchBehaviour = "success";
+  lastFetcherOptions = {};
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -210,6 +215,26 @@ describe("ldFetch", () => {
     await expect(ldFetch(EXAMPLE_URI, storeDir)).rejects.toThrow(
       /HTTP 404.*Not Found/i
     );
+  });
+});
+
+describe("ldFetch — authorization header", () => {
+  it("passes no headers object when authorization is not provided", async () => {
+    await ldFetch(EXAMPLE_URI, storeDir);
+    // When no extraHeaders are supplied the load options should have no headers key
+    expect(lastFetcherOptions).not.toHaveProperty("headers");
+  });
+
+  it("passes Authorization header to fetcher.load() when provided", async () => {
+    await ldFetch(EXAMPLE_URI, storeDir, { Authorization: "Bearer secret-token" });
+    expect(lastFetcherOptions).toHaveProperty("headers");
+    expect(lastFetcherOptions.headers).toMatchObject({ Authorization: "Bearer secret-token" });
+  });
+
+  it("returns a valid FetchResult when Authorization header is supplied", async () => {
+    const result = await ldFetch(EXAMPLE_URI, storeDir, { Authorization: "Bearer secret-token" });
+    expect(result.tripleCount).toBeGreaterThan(0);
+    expect(result.uri).toBe(EXAMPLE_URI);
   });
 });
 

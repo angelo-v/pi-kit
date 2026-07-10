@@ -66,6 +66,13 @@ export default function (pi: ExtensionAPI) {
       uri: Type.String({
         description: "HTTP/HTTPS URI to dereference.",
       }),
+      authorization: Type.Optional(
+        Type.String({
+          description:
+            "Optional value for the HTTP Authorization header, e.g. \"Bearer <token>\" " +
+            "or \"Basic <base64>\". Use when the endpoint requires authentication.",
+        })
+      ),
     }),
 
     async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
@@ -73,7 +80,11 @@ export default function (pi: ExtensionAPI) {
         const storeDir = defaultStoreDir();
         mkdirSync(storeDir, { recursive: true });
 
-        const result = await ldFetch(params.uri, storeDir);
+        const extraHeaders: Record<string, string> | undefined = params.authorization
+          ? { Authorization: params.authorization }
+          : undefined;
+
+        const result = await ldFetch(params.uri, storeDir, extraHeaders);
         const text = formatFetchResult(result);
 
         return {
