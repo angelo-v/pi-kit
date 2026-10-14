@@ -7,14 +7,15 @@
  */
 
 import * as nodePath from "node:path";
+import { pathToFileURL } from "node:url";
 import * as nodeFs from "node:fs/promises";
 import {Store} from "oxigraph";
 import {parseTurtle} from "./rdf-parse.js";
 import {serialize} from "./rdf-serialize.js";
 import type {OutputFormat} from "./rdf-format.js";
 import {inferFormat} from "./rdf-format.js";
-import type {Quad} from "n3";
-import {Parser as N3Parser} from "n3";
+import type { Quad } from "n3";
+import { Parser as N3Parser, NamedNode } from "n3";
 
 export interface PatchRdfOptions {
   /** Destination file path (absolute or relative to `cwd`). */
@@ -96,7 +97,11 @@ export async function patchRdf(
   }
 
   // Parse Turtle → quads + prefixes (preserves prefix declarations).
-  const { quads: originalQuads, prefixes } = await parseTurtle(source);
+  // Pass the file's own location as base so relative IRIs (e.g.
+  // `@prefix v: <../vocab.ttl#>.` and `<#this>`) resolve against the file.
+  // An explicit `@base` in the source still wins.
+  const fileUrl = pathToFileURL(absPath).href;
+  const { quads: originalQuads, prefixes } = await parseTurtle(source, { baseIRI: fileUrl });
   const triplesBefore = originalQuads.length;
 
   // Load quads into an in-memory Oxigraph store.
@@ -111,7 +116,9 @@ export async function patchRdf(
   }
 
   // Execute the SPARQL Update — Oxigraph throws on invalid syntax.
-  store.update(options.update);
+  // The same base is needed here so relative IRIs inside the update itself
+  // (e.g. `INSERT DATA { <#task-1> dct:title "x" . }`) resolve like in the file.
+  store.update(options.update, { base_iri: fileUrl });
 
   // Extract updated quads from the store.
   const updatedQuads = [...store.match(null, null, null, null)];
@@ -124,7 +131,16 @@ export async function patchRdf(
 
   // Re-parse the N-Quads dump to get n3 Quad objects that serialize() can handle.
   const n3Quads = await parseNQuads(nqDump);
-  const output = await serialize(n3Quads, "turtle", prefixes);
+
+  // Relative IRIs must survive the patch: the store holds them in absolute
+  // form (Oxigraph cannot keep scheme-less IRIs), so relativize terms and
+  // prefix values against the file's own URL before serializing.
+  const relativeQuads = n3Quads.map((q) => relativizeQuad(q, fileUrl));
+  const relativePrefixes = Object.fromEntries(
+    Object.entries(prefixes).map(([name, value]) => [name, relativizeIri(value, fileUrl)])
+  );
+
+  const output = await serialize(relativeQuads, "turtle", relativePrefixes);
 
   await fs.mkdir(nodePath.dirname(absPath), { recursive: true });
   await fs.writeFile(absPath, output, "utf8");
@@ -144,6 +160,72 @@ export async function patchRdf(
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Converts an absolute IRI into a relative reference against `baseUrl` (the
+ * document's own URL), so files keep their relative-IRI style after patching.
+ *
+ * - Same document: `file:///dir/plan.ttl#this` → `#this`
+ * - Sibling/ancestor in the same tree: `file:///dir/doc.ttl` vs
+ *   `file:///dir/vocab.ttl#` → `../vocab.ttl#`
+ * - Anything else (e.g. `http://…`): returned unchanged.
+ */
+export function relativizeIri(iri: string, baseUrl: string): string {
+  if (iri.startsWith(baseUrl)) {
+    return iri.slice(baseUrl.length);
+  }
+
+  const baseDir = baseUrl.slice(0, baseUrl.lastIndexOf("/") + 1);
+  let rel: string | undefined;
+
+  if (iri.startsWith(baseDir)) {
+    // Below the document's directory: one `../` per remaining path segment of
+    // the base URL (the final segment is the document itself, not a directory).
+    const baseAfterDir = baseUrl.slice(baseDir.length);
+    const levelsUp = baseAfterDir.split("/").length - 1;
+    rel = "../".repeat(levelsUp) + iri.slice(baseDir.length);
+  } else {
+    // Climb up from the document's directory until the IRI shares that prefix.
+    let dir = baseDir;
+    let levelsUp = 0;
+    while (dir.length > 0) {
+      const cut = dir.lastIndexOf("/", dir.length - 2);
+      if (cut < 0) return iri; // reached the scheme root without a match
+      dir = dir.slice(0, cut + 1);
+      levelsUp++;
+      if (iri.startsWith(dir)) {
+        rel = "../".repeat(levelsUp) + iri.slice(dir.length);
+        break;
+      }
+    }
+  }
+
+  // A relative reference must not contain ":" before its first "/" —
+  // that would be parsed as a scheme instead of a path segment.
+  if (rel === undefined || rel.includes(":")) {
+    return iri;
+  }
+  return rel;
+}
+
+/** Returns a copy of `quad` with all `file://`-based IRIs relativized. */
+function relativizeQuad(quad: Quad, baseUrl: string): Quad {
+  const rel = (term: Quad["subject"]): Quad["subject"] =>
+    term.termType === "NamedNode"
+      ? new NamedNode(relativizeIri(term.value, baseUrl))
+      : term;
+  return {
+    subject:     rel(quad.subject),
+    predicate:   rel(quad.predicate),
+    object:      rel(quad.object),
+    graph:       rel(quad.graph),
+    value:       quad.value,
+    termType:    quad.termType,
+    equals:      quad.equals,
+    toString:    quad.toString,
+    toJSON:      quad.toJSON,
+  } as Quad;
+}
 
 /**
  * Parse an N-Quads string back into n3 Quad objects so we can hand them to

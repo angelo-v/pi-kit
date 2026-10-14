@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `rdf_write` / `parseTurtle`: relative URIs (e.g. `</contacts/jane-doe.ttl#this>`) were expanded against an `"undefined"` base because the n3 `Parser` was constructed without a `baseIRI`, leaking the literal string `"undefined"` into IRIs. `parseTurtle` now parses with `baseIRI = "#"`, which sets an empty base root so relative references survive intact. This also fixes `rdf_patch`, which reads source files through the same `parseTurtle`. An explicit `@base` in the source still overrides this.
+- `rdf_write` / `parseTurtle`: relative URIs (e.g. `</contacts/jane-doe.ttl#this>`) were expanded against an `"undefined"` base because the n3 `Parser` was constructed without a `baseIRI`, leaking the literal string `"undefined"` into IRIs. `parseTurtle` now parses with `baseIRI = "#"`, which sets an empty base root so relative references survive intact. An explicit `@base` in the source still overrides this.
+- `rdf_patch`: failed with `No scheme found in an absolute IRI` on files that use relative IRIs (e.g. `@prefix v: <../vocab.ttl#>.` with `<#this>` fragment IRIs), because relative IRIs were parsed with no base and then rejected by Oxigraph. `rdf_patch` now resolves relative IRIs in both the parsed file and the SPARQL update against the target file's own `file://` URL (an explicit `@base` in the source still wins). Relative IRI style is preserved on output: patched files keep their relative IRIs and prefix declarations.
 
 ## 0.9.1
 

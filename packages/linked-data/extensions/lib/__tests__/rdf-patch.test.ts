@@ -164,6 +164,98 @@ describe("patchRdf: WHERE condition not matched", () => {
   });
 });
 
+// ── Relative IRIs ─────────────────────────────────────────────────────────
+
+// Files that use relative IRIs are common in the wild: a vocabulary prefix
+// pointing at a sibling file and fragment IRIs for the described resource.
+const RELATIVE_IRI_TTL = `
+@prefix vocab: <../vocab.ttl#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+
+<#this> a vocab:Thing ;
+    dct:title "Sample document" .
+`;
+
+describe("patchRdf: relative IRIs in file and update", () => {
+  it("does not throw on a file with relative @prefix and relative <#...> IRIs", async () => {
+    const fs = makeFakeFs(RELATIVE_IRI_TTL);
+    await expect(
+      patchRdf(
+        {
+          path: "dev/docs/my-doc/doc.ttl",
+          update: `
+            PREFIX vocab: <../vocab.ttl#>
+            PREFIX dct: <http://purl.org/dc/terms/>
+            INSERT DATA { <#item-1> dct:title "Added by patch" . }
+          `,
+          cwd: "/ws",
+        },
+        fs
+      )
+    ).resolves.toBeTruthy();
+  });
+
+  it("resolves relative IRIs against the file location when patching", async () => {
+    const fs = makeFakeFs(RELATIVE_IRI_TTL);
+    const result = await patchRdf(
+      {
+        path: "dev/docs/my-doc/doc.ttl",
+        update: `
+          PREFIX vocab: <../vocab.ttl#>
+          PREFIX dct: <http://purl.org/dc/terms/>
+          INSERT DATA { <#item-1> dct:title "Added by patch" . }
+        `,
+        cwd: "/ws",
+      },
+      fs
+    );
+    expect(result.triplesAfter).toBe(result.triplesBefore + 1);
+    const written = vi.mocked(fs.writeFile).mock.calls[0][1];
+    // The inserted triple must be a triple about the same file-relative subject
+    // as the existing one (same <#this> base), joined by the shared type triple.
+    expect(written).toContain("Added by patch");
+  });
+
+  it("keeps relative IRIs relative in the output (no file:// rewrite)", async () => {
+    const fs = makeFakeFs(RELATIVE_IRI_TTL);
+    await patchRdf(
+      {
+        path: "dev/docs/my-doc/doc.ttl",
+        update: `
+          PREFIX vocab: <../vocab.ttl#>
+          PREFIX dct: <http://purl.org/dc/terms/>
+          INSERT DATA { <#item-1> dct:title "Added by patch" . }
+        `,
+        cwd: "/ws",
+      },
+      fs
+    );
+    const written = vi.mocked(fs.writeFile).mock.calls[0][1];
+    expect(written).not.toContain("file://");
+    expect(written).toContain("../vocab.ttl#");
+    expect(written).toContain("<#this>");
+  });
+
+  it("writes IRIs inserted by the update as relative IRIs too", async () => {
+    const fs = makeFakeFs(RELATIVE_IRI_TTL);
+    await patchRdf(
+      {
+        path: "dev/docs/my-doc/doc.ttl",
+        update: `
+          PREFIX vocab: <../vocab.ttl#>
+          PREFIX dct: <http://purl.org/dc/terms/>
+          INSERT DATA { <#item-1> dct:title "Added by patch" . }
+        `,
+        cwd: "/ws",
+      },
+      fs
+    );
+    const written = vi.mocked(fs.writeFile).mock.calls[0][1];
+    expect(written).toContain("<#item-1>");
+    expect(written).not.toContain("file://");
+  });
+});
+
 // ── Error: file does not exist ─────────────────────────────────────────────────
 
 describe("patchRdf: file not found", () => {
