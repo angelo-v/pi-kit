@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.10.1
+
+### Fixed
+
+- `rdf_patch`: tool guidelines now explicitly tell the agent to write IRIs exactly as the document does — bare `<#...>` or `../other.ttl#...` for relative-IRI files — and not to declare a custom prefix or BASE for the document's own namespace. Previously, declaring an absolute prefix for the file's own namespace silently leaked long-form absolute IRIs for newly inserted triples into the patched file (e.g. `<http://example.org/plans/plan.ttl#task-2>` next to existing `<#task-1>`).
+
 ## 0.10.0
 
 ### Added
