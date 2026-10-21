@@ -15,6 +15,10 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use rdf_patch for surgical add/remove/replace of triples; use rdf_write to overwrite whole files.",
       "rdf_patch supports Turtle (.ttl) only.",
+      "Write IRIs exactly as the document does — bare <#...> or ../other.ttl#... when the file uses relative IRIs. " +
+      "Relative IRIs resolve against the file itself. " +
+      "Don't declare a custom prefix or BASE for the document's own namespace; " +
+      "absolute IRIs for it would leak into the output as long-form absolute IRIs.",
     ],
     parameters: Type.Object({
       path: Type.String({
