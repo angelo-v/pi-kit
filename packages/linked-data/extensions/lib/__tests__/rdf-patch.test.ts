@@ -256,6 +256,65 @@ describe("patchRdf: relative IRIs in file and update", () => {
   });
 });
 
+// ── Order stability ───────────────────────────────────────────────────────────
+// Oxigraph walks its internal store list backwards on dump/match, which reshuffles
+// the whole file on every patch. Reversing the updated quads before serialization
+// restores the original source order. See ideas/rdf-patch-stable.md.
+
+describe("patchRdf: order stability", () => {
+  const FIVE = `
+@prefix ex: <http://example.org/> .
+ex:Alice ex:age 30 .
+ex:Bob   ex:age 25 .
+ex:Carol ex:age 40 .
+ex:Dave  ex:age 22 .
+ex:Eve   ex:age 35 .
+`;
+
+  function subjectOrder(ttl: string): string[] {
+    return ttl
+      .split("\n")
+      .filter((l) => l.startsWith("ex:"))
+      .map((l) => l.split(" ")[0]);
+  }
+
+  it("keeps untouched triples in their original order and moves the patched one to the end", async () => {
+    const fs = makeFakeFs(FIVE);
+    await patchRdf(
+      {
+        path: "data.ttl",
+        update: `
+          PREFIX ex: <http://example.org/>
+          DELETE { ex:Bob ex:age ?old }
+          INSERT { ex:Bob ex:age 26 }
+          WHERE  { ex:Bob ex:age ?old }
+        `,
+        cwd: "/ws",
+      },
+      fs
+    );
+    const written = vi.mocked(fs.writeFile).mock.calls[0][1] as string;
+    // Original order preserved (Alice, Carol, Dave, Eve), patched Bob moved to the end.
+    expect(subjectOrder(written)).toEqual(["ex:Alice", "ex:Carol", "ex:Dave", "ex:Eve", "ex:Bob"]);
+  });
+
+  it("pins Oxigraph's reverse-dump behavior this fix relies on", async () => {
+    // Not a behavior of patchRdf but of the underlying store: match() must walk
+    // the internal list backwards (dump = reverse of load order). If a future
+    // Oxigraph version changes this, patchRdf's .reverse() workaround must be
+    // revisited — this test fails loudly instead of silently reshuffling files.
+    const { Store } = await import("oxigraph");
+    const store = new Store();
+    store.load(FIVE, { format: "text/turtle" });
+    const dumped = store
+      .dump({ format: "application/n-quads" })
+      .trim()
+      .split("\n")
+      .map((l) => l.match(/<http:\/\/example\.org\/(\w+)>/)![1]);
+    expect(dumped).toEqual(["Eve", "Dave", "Carol", "Bob", "Alice"]);
+  });
+});
+
 // ── Error: file does not exist ─────────────────────────────────────────────────
 
 describe("patchRdf: file not found", () => {

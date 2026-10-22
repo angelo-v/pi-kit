@@ -130,12 +130,18 @@ export async function patchRdf(
   const nqDump = store.dump({ format: NQ_FORMAT });
 
   // Re-parse the N-Quads dump to get n3 Quad objects that serialize() can handle.
-  const n3Quads = await parseNQuads(nqDump);
 
   // Relative IRIs must survive the patch: the store holds them in absolute
   // form (Oxigraph cannot keep scheme-less IRIs), so relativize terms and
   // prefix values against the file's own URL before serializing.
-  const relativeQuads = n3Quads.map((q) => relativizeQuad(q, fileUrl));
+  //
+  // Oxigraph walks its internal store list backwards on dump/match, which would
+  // reshuffle the whole file on every patch. Reversing the dumped quads restores
+  // the original source order (untouched triples keep their position;
+  // patched/inserted ones land at the end). Pinned by the "order stability" tests.
+  const relativeQuads = (await parseNQuads(nqDump))
+    .reverse()
+    .map((q) => relativizeQuad(q, fileUrl));
   const relativePrefixes = Object.fromEntries(
     Object.entries(prefixes).map(([name, value]) => [name, relativizeIri(value, fileUrl)])
   );
