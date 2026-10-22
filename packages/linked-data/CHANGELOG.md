@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.10.2
+
+### Fixed
+
+- `rdf_patch`: patched files no longer get their triple order reshuffled on every patch. The fix reverses Oxigraph's store dump, which walks its internal list backwards, so untouched triples keep their original file order and newly inserted or patched triples are appended at the end.
+
 ## 0.10.1
 
 ### Fixed
