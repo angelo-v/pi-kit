@@ -374,6 +374,20 @@ describe("patchRdf: document prefixes in scope", () => {
     const written = vi.mocked(fs.writeFile).mock.calls[0][1];
     expect(written).toContain("http://other.example.org/");
   });
+
+  it("throws an actionable error when the update uses an undeclared prefix", async () => {
+    const fs = makeFakeFs(BASE_TTL);
+    await expect(
+      patchRdf(
+        {
+          path: "data.ttl",
+          update: `INSERT DATA { other:Carol other:age 20 . }`,
+          cwd: "/ws",
+        },
+        fs
+      )
+    ).rejects.toThrow(/not declared in the update/i);
+  });
 });
 
 // ── Error: file does not exist ─────────────────────────────────────────────────

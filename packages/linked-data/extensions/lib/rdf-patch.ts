@@ -130,7 +130,16 @@ export async function patchRdf(
     ? `${prefixDeclarations}\n${options.update}`
     : options.update;
 
-  store.update(effectiveUpdate, { base_iri: fileUrl });
+  try {
+    store.update(effectiveUpdate, { base_iri: fileUrl });
+  } catch (err: any) {
+    const prefixHint = /Prefix not found/.test(err?.message ?? "")
+      ? ` Prefix \`${extractMissingPrefix(err.message, effectiveUpdate)}\` is not declared in the update. ` +
+        `Document-level @prefix declarations are in scope automatically — ` +
+        `check the prefix spelling or add a PREFIX clause to the update.`
+      : "";
+    throw new Error(`rdf_patch: invalid SPARQL Update. ${err?.message ?? err}${prefixHint}`);
+  }
 
   // Extract updated quads from the store.
   const updatedQuads = [...store.match(null, null, null, null)];
@@ -175,6 +184,21 @@ export async function patchRdf(
     `✓ Patched \`${options.path}\`: ${triplesBefore} → ${triplesAfter} triples (${deltaStr}).`;
 
   return { absPath, format: fmt, triplesBefore, triplesAfter, summary };
+}
+
+/* eslint-disable-next-line */
+function extractMissingPrefix(message: string, update: string): string {
+  // Oxigraph's message looks like: `error at 2:26: expected one of Prefix not found, ...`
+  // Column points at the offending prefixed name's start; the local part ends
+  // at the next character that cannot appear in a PN_LOCAL.
+  const m = /error at (\d+):(\d+):/.exec(message);
+  if (!m) return "";
+  const lineIndex = Number(m[1]) - 1;
+  const col = Number(m[2]) - 1;
+  const line = update.split("\n")[lineIndex] ?? "";
+  const rest = line.slice(col);
+  const match = /^[A-Za-z][\w.-]*/.exec(rest);
+  return match ? `${match[0]}:` : "";
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
