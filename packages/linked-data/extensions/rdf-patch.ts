@@ -15,6 +15,7 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use rdf_patch for surgical add/remove/replace of triples; use rdf_write to overwrite whole files.",
       "rdf_patch supports Turtle (.ttl) only.",
+      "Prefixed names in the update resolve against the document's @prefix declarations — no inline PREFIX needed.",
       "Write IRIs exactly as the document does — bare <#...> or ../other.ttl#... when the file uses relative IRIs. " +
       "Relative IRIs resolve against the file itself. " +
       "Don't declare a custom prefix or BASE for the document's own namespace; " +

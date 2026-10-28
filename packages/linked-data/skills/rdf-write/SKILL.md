@@ -86,3 +86,4 @@ When you only need to add, remove, or replace a few triples in an **existing** `
 | Replacing a property value | `rdf_patch` |
 
 `rdf_patch` accepts a SPARQL Update statement and rewrites only the changed triples.
+Prefixed names in the update resolve against the document's `@prefix` declarations — no inline `PREFIX` clause needed.
