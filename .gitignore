@@ -1,4 +1,4 @@
 .idea
-node_modules/packages/linked-data/*.tgz
+node_modules/
 
 *.tgz
