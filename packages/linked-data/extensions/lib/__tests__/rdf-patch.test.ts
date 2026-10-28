@@ -315,6 +315,67 @@ ex:Eve   ex:age 35 .
   });
 });
 
+// ── Document prefixes in scope ───────────────────────────────────────────────
+// SPARQL Update does not inherit @prefix declarations from the Turtle document,
+// so an update using only prefixed names (no inline PREFIX clause) currently
+// fails with a raw Oxigraph lexer error. patchRdf already has the document's
+// prefix map, so it should inject document prefixes into the update.
+
+const PREFIXED_DOC_TTL = `
+@prefix ex: <http://example.org/vocab#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+
+<#item-1> a ex:Item;
+    dct:title "Example Item";
+    ex:status ex:draft.
+`;
+
+describe("patchRdf: document prefixes in scope", () => {
+  it("applies an update that uses document prefixes without inline PREFIX clauses", async () => {
+    const fs = makeFakeFs(PREFIXED_DOC_TTL);
+    const result = await patchRdf(
+      {
+        path: "data.ttl",
+        update: `DELETE DATA { <#item-1> ex:status ex:draft . }`,
+        cwd: "/ws",
+      },
+      fs
+    );
+    expect(result.triplesAfter).toBe(result.triplesBefore - 1);
+  });
+
+  it("applies an update with a relative-IRI prefix from the document without inline PREFIX", async () => {
+    const fs = makeFakeFs(RELATIVE_IRI_TTL);
+    const result = await patchRdf(
+      {
+        path: "dev/docs/my-doc/doc.ttl",
+        update: `INSERT DATA { <#item-2> a vocab:Thing . }`,
+        cwd: "/ws",
+      },
+      fs
+    );
+    expect(result.triplesAfter).toBe(result.triplesBefore + 1);
+  });
+
+  it("lets an explicit PREFIX clause in the update override the document prefix", async () => {
+    const fs = makeFakeFs(BASE_TTL);
+    const result = await patchRdf(
+      {
+        path: "data.ttl",
+        update: `
+          PREFIX ex: <http://other.example.org/>
+          INSERT DATA { ex:Carol ex:age 20 . }
+        `,
+        cwd: "/ws",
+      },
+      fs
+    );
+    expect(result.triplesAfter).toBe(result.triplesBefore + 1);
+    const written = vi.mocked(fs.writeFile).mock.calls[0][1];
+    expect(written).toContain("http://other.example.org/");
+  });
+});
+
 // ── Error: file does not exist ─────────────────────────────────────────────────
 
 describe("patchRdf: file not found", () => {

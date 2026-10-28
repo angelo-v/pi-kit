@@ -118,7 +118,19 @@ export async function patchRdf(
   // Execute the SPARQL Update — Oxigraph throws on invalid syntax.
   // The same base is needed here so relative IRIs inside the update itself
   // (e.g. `INSERT DATA { <#task-1> dct:title "x" . }`) resolve like in the file.
-  store.update(options.update, { base_iri: fileUrl });
+  //
+  // SPARQL Update does not inherit @prefix declarations from the document, so
+  // document prefixes are injected first — prefixed names in the update resolve
+  // against the document's vocabulary without requiring inline PREFIX clauses.
+  // Explicit PREFIX clauses later in the update override document prefixes.
+  const prefixDeclarations = Object.entries(prefixes)
+    .map(([name, iri]) => `PREFIX ${name}: <${iri}>`)
+    .join("\n");
+  const effectiveUpdate = prefixDeclarations
+    ? `${prefixDeclarations}\n${options.update}`
+    : options.update;
+
+  store.update(effectiveUpdate, { base_iri: fileUrl });
 
   // Extract updated quads from the store.
   const updatedQuads = [...store.match(null, null, null, null)];
