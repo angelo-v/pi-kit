@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## 0.10.3
+
 ### Fixed
 - `rdf_patch` — SPARQL Updates now resolve prefixed names against the document's `@prefix` declarations
   without needing inline `PREFIX` clauses; updates with an undeclared prefix fail with an actionable
